@@ -358,9 +358,11 @@
         first = false;
       }
 
-      // Pending outranks "needs a driver": the carrier has already told us,
-      // we just have not applied it yet.
-      var pend = !l.driver && l.pendingDriver;
+      // Pending means "you told us something we have not applied yet", which
+      // includes CHANGING a driver, not just adding one. Checking only for an
+      // empty driver left a swap looking untouched: the card stayed green with
+      // the old name and nothing showed the submission had landed.
+      var pend = l.pendingDriver && l.pendingDriver !== l.driver;
       var cls = l.locked ? 'load lock'
               : pend      ? 'load pend'
               : l.driver  ? 'load ok' : 'load need';
@@ -388,6 +390,7 @@
       }
       if (pend) {
         html += '<div class="pendmsg">Received: ' + esc(l.pendingDriver) +
+                (l.driver ? ' &middot; replacing ' + esc(l.driver) : '') +
                 ' &middot; pending confirmation</div>';
       }
 
@@ -400,13 +403,13 @@
       } else {
         html += '<label>Driver</label>' +
                 '<select class="drv" data-i="' + i + '" onchange="onDrv(this)">' +
-                driverOptions(l.driver || l.pendingDriver) + '</select>';
+                driverOptions(l.pendingDriver || l.driver) + '</select>';
 
         // Remember exactly what this card is rendered with. On submit we compare
         // against THIS, not against CARRIER, so a prefill that differs from the
         // CARRIER record by formatting cannot masquerade as a carrier edit.
         INIT[i] = {
-          driver: l.driver || l.pendingDriver || '',
+          driver: l.pendingDriver || l.driver || '',
           mobile: inputNorm(l.mobile || d.mobile || ''),
           dl:     inputNorm(l.dl     || d.dl     || ''),
           tk:     inputNorm(l.tk     || d.tk     || ''),
