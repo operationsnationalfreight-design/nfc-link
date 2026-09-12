@@ -22,8 +22,17 @@
   .mark { text-align: center; }
   .mark img { width: 384px; max-width: 86vw; height: auto; display: block;
               opacity: 0; animation: rise 2s ease-out forwards; }
+
+  /* Fades in and HOLDS. This is covering the Apps Script load, not adding to
+     it: the forward fires immediately, and a browser keeps showing the current
+     page until the destination responds. So this sits over a wait that already
+     exists rather than creating one.
+     
+     No dissolve out, deliberately. The form can take anywhere from one second
+     to ten, and fading the logo away at a fixed moment would leave a blank
+     green screen for whatever is left. */
   @keyframes rise {
-    from { opacity: 0; transform: translateY(8px); }
+    from { opacity: 0;   transform: translateY(8px); }
     to   { opacity: .92; transform: none; }
   }
 
@@ -100,13 +109,18 @@
     var dest = TARGET + qs;
     document.getElementById("manual").href = dest;
 
-    // Only if the forward has genuinely failed to take hold. Four seconds is
-    // long enough that nobody sees this on a normal load.
+    // Only if the forward has genuinely failed to take hold. Well past the
+    // animation, so nobody sees this on a normal load.
     setTimeout(function () {
       document.getElementById("mark").style.display = "none";
       document.getElementById("slow").className = "card on";
-    }, 4000);
+    }, 10000);
 
+    // Immediately. The browser holds this page on screen until the
+    // destination responds, so the logo covers the load rather than delaying
+    // it. Any pause added here would be a pause on top of the wait, not
+    // instead of it.
+    //
     // replace() rather than assign(), so Back returns to the email rather than
     // bouncing through this page again.
     window.location.replace(dest);
