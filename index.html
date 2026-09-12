@@ -20,13 +20,10 @@
      The logo is pulled from the live site rather than copied in here, so it
      never drifts out of step with the brand. */
   .mark { text-align: center; }
-  .mark img { width: 230px; max-width: 64vw; height: auto; display: block;
-              opacity: 0; animation: rise .9s ease-out forwards; }
-  .mark .sub { margin-top: 14px; font-size: 11px; letter-spacing: 2.6px;
-               text-transform: uppercase; opacity: 0;
-               animation: rise .9s ease-out .14s forwards; }
+  .mark img { width: 384px; max-width: 86vw; height: auto; display: block;
+              opacity: 0; animation: rise 2s ease-out forwards; }
   @keyframes rise {
-    from { opacity: 0; transform: translateY(7px); }
+    from { opacity: 0; transform: translateY(8px); }
     to   { opacity: .92; transform: none; }
   }
 
@@ -48,7 +45,6 @@
 <div class="mark" id="mark">
   <img src="https://nationalfreightconnection.com/images/logo.svg"
        alt="National Freight Connection">
-  <div class="sub">Driver Details</div>
 </div>
 
 <div class="card" id="slow">
