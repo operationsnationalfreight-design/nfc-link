@@ -87,19 +87,24 @@
   // Forwarding hop for the carrier form.
   //
   // WHY THIS EXISTS
-  //   The form lives on an Apps Script deployment whose URL is long, opaque,
-  //   and pinned inside several projects. Replace that deployment and every
-  //   link in every email already sent goes dead, with several projects to
-  //   edit before anything works again. Pointing those projects here means the
-  //   deployment URL lives in ONE file: change the line below and every
-  //   historical link keeps working.
+  //   Every link we have ever sent points here rather than at a specific
+  //   destination, so the destination can change without killing anything
+  //   already sitting in a carrier's inbox. That is what makes the line below
+  //   a cutover switch: it now forwards to the form we host ourselves, and
+  //   every link ever minted followed it there the moment this file changed.
   //
   //   It also strips the /u/N/ rewrite a browser applies when the user is
   //   signed in to more than one Google account, which silently drops the
   //   query string and takes the token with it. That rewrite happens in the
   //   browser before the request is sent, so it cannot be caught server-side.
+  //
+  // FALLBACK
+  //   Apps Script still serves its own version of the form at the /exec URL
+  //   below. If the hosted one ever misbehaves, put that back in TARGET and
+  //   every carrier is on the old form within a minute.
+  //     https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec
 
-  var TARGET = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+  var TARGET = "https://link.nationalfreightconnection.com/form.html";
 
   // Pass the whole query string through untouched. The token is signed, so a
   // single altered character makes it invalid.
