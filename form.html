@@ -5,6 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#0d3320">
+<link rel="preconnect" href="https://script.google.com" crossorigin>
+<link rel="preconnect" href="https://googleusercontent.com" crossorigin>
+<script>
+  // Fired here, in the head, before the stylesheet or the body have been
+  // parsed. The request is the slow part by an order of magnitude, so it
+  // should be in flight while the browser is still building the page rather
+  // than waiting for a script tag at the bottom.
+  window.API = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+  window.T0 = Date.now();
+  var _t = new URLSearchParams(location.search).get('t') || '';
+  window.BOARD = _t
+    ? fetch(window.API + '?api=payload&t=' + encodeURIComponent(_t),
+            { method: 'GET', redirect: 'follow' }).then(function (r) { return r.json(); })
+    : Promise.resolve({ ok: false, error: 'missing' });
+</script>
 <title>Driver &amp; Equipment Details | National Freight Connection</title>
 <style>
 
@@ -122,11 +137,11 @@
                     border-top: 1px solid #e0e4e2; padding-top: 8px; }
   }
 
-  /* Deliberately plain while we measure. Anything animated here disguises how
-     long the fetch actually takes, and the number is the point right now. */
-  #splash { min-height: 40vh; display: flex; align-items: center;
-            justify-content: center; font-size: 13px; color: #666; }
-  #app { display: none; }
+  /* The shell is static, so it comes off the CDN in about a tenth of a second.
+     Hiding it behind a splash wasted that: the carrier would stare at nothing
+     while the data fetch ran, when they could be reading the layout and
+     watching it fill. Skeletons show where things will land. */
+  #app { display: block; }
   #dead { display: none; max-width: 460px; margin: 14vh auto 0; background: #fff;
           border: 1px solid #d8dcda; border-radius: 6px; padding: 28px 24px;
           text-align: center; }
@@ -136,8 +151,6 @@
 </style>
 </head>
 <body>
-
-<div id="splash">Loading<span id="ms"></span></div>
 
 <div id="dead"></div>
 
@@ -174,9 +187,15 @@
         <h2>Loads</h2>
         <p class="note">Assign or confirm the driver for each load.</p>
         <div id="loads">
-          <div class="skel w45"></div><div class="skel w90"></div>
-          <div class="skel w70"></div><div class="skel w90"></div>
-          <div class="skel w45"></div><div class="skel w90"></div>
+          <div class="dbar first" style="opacity:.45;">&nbsp;</div>
+          <div class="load"><div class="skel w45" style="margin:2px auto 10px;"></div>
+            <div class="split"><div class="left"><div class="skel w90"></div>
+            <div class="skel w70"></div></div><div class="right">
+            <div class="skel w90"></div><div class="skel w90"></div></div></div></div>
+          <div class="load"><div class="skel w45" style="margin:2px auto 10px;"></div>
+            <div class="split"><div class="left"><div class="skel w90"></div>
+            <div class="skel w70"></div></div><div class="right">
+            <div class="skel w90"></div><div class="skel w90"></div></div></div></div>
         </div>
       </div>
     </div>
@@ -212,7 +231,7 @@
   // Everything security-relevant is unchanged. The token still proves who the
   // carrier is, still scopes to one SCAC, still expires on its own. Nothing
   // here can read anything the old form could not.
-  var API = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+  var API = window.API;
 
 
   // The token is the whole session. It is signed, scopes to one carrier and
@@ -598,12 +617,15 @@
 
   // Reads the board. A plain GET with no custom headers, so the browser
   // treats it as a simple request and never sends a preflight.
-  function loadBoard(onDone) {
-    fetch(API + '?api=payload&t=' + encodeURIComponent(TOKEN), {
-      method: 'GET',
-      redirect: 'follow'
-    })
-      .then(function (r) { return r.json(); })
+  // The first load consumes the request the head already started. A refresh
+  // after submitting makes a fresh one.
+  function loadBoard(onDone, fresh) {
+    var p = (!fresh && window.BOARD)
+      ? window.BOARD
+      : fetch(API + '?api=payload&t=' + encodeURIComponent(TOKEN),
+              { method: 'GET', redirect: 'follow' }).then(function (r) { return r.json(); });
+    window.BOARD = null;
+    p
       .then(function (p) {
         if (!p.ok) { showDead(p.error); return; }
         SCAC = p.scac || '';
@@ -629,24 +651,17 @@
       btn.disabled = false;
       btn.textContent = 'Continue';
       window.scrollTo(0, 0);
-    });
+    }, true);
   }
 
   // Nothing is on screen until the board arrives, so the wait sits under our
   // own brand rather than a half-built form.
-  var T0 = Date.now();
-  var tick = setInterval(function () {
-    var el = document.getElementById('ms');
-    if (el) el.textContent = ' ' + ((Date.now() - T0) / 1000).toFixed(1) + 's';
-  }, 100);
-
   if (!TOKEN) showDead('missing');
   else loadBoard(function () {
-    clearInterval(tick);
-    console.log('[form] board ready in ' + (Date.now() - T0) + 'ms');
+    console.log('[form] board ready in ' + (Date.now() - window.T0) + 'ms');
     var b = document.createElement('div');
     b.style.cssText = 'text-align:center;font-size:12px;color:#888;padding:6px 0 0';
-    b.textContent = 'rendered in ' + (Date.now() - T0) + ' ms';
+    b.textContent = 'rendered in ' + (Date.now() - window.T0) + ' ms';
     document.getElementById('app').appendChild(b);
   });
 
@@ -674,8 +689,9 @@
     document.getElementById('send').disabled = false;
   }
 
+  // The shell is already on screen; this only unhides it after an error state
+  // hid it.
   function reveal() {
-    document.getElementById('splash').style.display = 'none';
     document.getElementById('app').style.display = 'block';
   }
 
@@ -695,7 +711,6 @@
                     'wrong on your end. Try again in a moment.']
     }[kind] || ['Something went wrong', detail || 'Please try again shortly.'];
 
-    document.getElementById('splash').style.display = 'none';
     document.getElementById('app').style.display = 'none';
     var d = document.getElementById('dead');
     d.style.display = 'block';
