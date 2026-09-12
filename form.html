@@ -146,17 +146,25 @@
      creeps toward 90% on a curve that never quite arrives, then snaps to full
      and fades the moment the data lands, so it finishes exactly when the wait
      does rather than lying about progress it cannot measure. */
-  #bar { position: fixed; top: 0; left: 0; right: 0; height: 30px;
-         pointer-events: none; z-index: 60; transition: opacity .45s ease .15s; }
+  #bar { position: fixed; inset: 0; z-index: 60; pointer-events: none;
+         display: flex; align-items: center; justify-content: center;
+         background: rgba(238,241,239,.55);
+         backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+         transition: opacity .5s ease .1s; }
   #bar.done { opacity: 0; }
-  #bar .track { position: absolute; top: 0; left: 0; right: 0; height: 3px;
-                background: rgba(13,51,32,.09); }
-  #bar .fill { position: absolute; top: 0; left: 0; height: 3px; width: 0;
-               background: #0d3320; transition: width .4s ease-out; }
-  #bar .rig { position: absolute; top: 3px; left: 0; width: 26px;
-              transform: translateX(-26px); color: #0d3320;
-              transition: left .4s ease-out; }
-  #bar .rig svg { display: block; width: 26px; height: 15px; }
+
+  /* The rig sits centred over a blurred board. The layout is legible enough
+     underneath to read as "your loads are coming" rather than an empty wait,
+     but soft enough that nobody tries to interact with a half-built page. */
+  #bar .stage { width: 300px; max-width: 74vw; }
+  #bar .rig { color: #0d3320; transform: translateX(-100%); }
+  #bar .rig svg { display: block; width: 120px; height: 66px; }
+  #bar .road { position: relative; height: 3px; margin-top: 6px;
+               background: rgba(13,51,32,.12); border-radius: 2px;
+               overflow: hidden; }
+  #bar .fill { position: absolute; inset: 0 auto 0 0; width: 0;
+               background: #0d3320; border-radius: 2px; }
+  #bar .fill, #bar .rig { transition: width .45s ease-out, transform .45s ease-out; }
   @media (prefers-reduced-motion: reduce) {
     #bar .fill, #bar .rig { transition: none; }
   }
@@ -172,16 +180,17 @@
 <body>
 
 <div id="bar" aria-hidden="true">
-  <div class="track"></div>
-  <div class="fill"></div>
-  <div class="rig">
-    <svg viewBox="0 0 44 24" fill="none" stroke="currentColor" stroke-width="2"
-         stroke-linecap="round" stroke-linejoin="round">
-      <path d="M2 17V5h22v12"/>
-      <path d="M24 9h7l5 5v3h-12z"/>
-      <circle cx="10" cy="18" r="3"/>
-      <circle cx="31" cy="18" r="3"/>
-    </svg>
+  <div class="stage">
+    <div class="rig">
+      <svg viewBox="0 0 44 24" fill="none" stroke="currentColor" stroke-width="1.7"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 17V5h22v12"/>
+        <path d="M24 9h7l5 5v3h-12z"/>
+        <circle cx="10" cy="18" r="3"/>
+        <circle cx="31" cy="18" r="3"/>
+      </svg>
+    </div>
+    <div class="road"><div class="fill"></div></div>
   </div>
 </div>
 
@@ -710,12 +719,14 @@
     setBar(progress);
   }, 120);
 
+  // The rig travels the width of the stage, offset by its own width so it
+  // starts fully off the left edge and arrives with its nose at the end.
   function setBar(pct) {
     var f = document.querySelector('#bar .fill');
     var r = document.querySelector('#bar .rig');
     if (!f) return;
     f.style.width = pct + '%';
-    r.style.left = pct + '%';
+    r.style.transform = 'translateX(calc(' + pct + '% - 60px))';
   }
 
   function finishBar() {
