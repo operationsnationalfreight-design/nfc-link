@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>CORS check</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #eef1ef; color: #1c1c1c;
+         font-family: -apple-system, Segoe UI, Arial, sans-serif; font-size: 14px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 17px; color: #0d3320; margin: 0 0 4px; }
+  p.lede { margin: 0 0 18px; color: #555; font-size: 13px; line-height: 1.55; }
+  label { display: block; font-size: 11px; font-weight: bold; color: #666;
+          text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 4px; }
+  input { width: 100%; font: inherit; padding: 9px; border: 1px solid #c4c8c6;
+          border-radius: 3px; }
+  button { font: inherit; font-size: 14px; padding: 11px 24px; border-radius: 3px;
+           cursor: pointer; border: 1px solid #0d3320; background: #0d3320;
+           color: #fff; margin-top: 14px; }
+  #verdict { margin-top: 18px; padding: 14px 16px; border-radius: 4px;
+             font-size: 14px; display: none; }
+  #verdict.ok   { display: block; background: #e9f5ec; border: 1px solid #b7dcc2;
+                  color: #1d5c30; }
+  #verdict.bad  { display: block; background: #fbeaea; border: 1px solid #e7bcbc;
+                  color: #8a2020; }
+  #verdict b { display: block; margin-bottom: 5px; }
+  pre { background: #fff; border: 1px solid #d8dcda; border-radius: 4px;
+        padding: 12px; overflow: auto; max-height: 320px; font-size: 12px;
+        line-height: 1.5; margin-top: 14px; }
+  .timing { margin-top: 10px; font-size: 12.5px; color: #555; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Cross-origin check</h1>
+  <p class="lede">
+    Proves a page on this domain can read the carrier payload straight from
+    Apps Script. If this works, the form can live here instead of inside
+    Google's iframe. If it does not, nothing else in that plan is worth
+    building.
+  </p>
+
+  <label>Form token</label>
+  <input id="tok" placeholder="paste the t= value from a carrier link">
+
+  <button onclick="run()">Run the check</button>
+
+  <div id="verdict"></div>
+  <div class="timing" id="timing"></div>
+  <pre id="out" style="display:none;"></pre>
+
+<script>
+  var ENDPOINT = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+
+  function show(ok, title, detail) {
+    var v = document.getElementById("verdict");
+    v.className = ok ? "ok" : "bad";
+    v.innerHTML = "<b>" + title + "</b>" + detail;
+  }
+
+  function run() {
+    var t = document.getElementById("tok").value.trim();
+    var out = document.getElementById("out");
+    var timing = document.getElementById("timing");
+    out.style.display = "none";
+    timing.textContent = "";
+
+    if (!t) { show(false, "No token", "Paste the t= value from any carrier link."); return; }
+
+    show(true, "Checking...", "Fetching the payload from Apps Script.");
+    var started = Date.now();
+
+    // No custom headers and no credentials, so this stays a simple request and
+    // never triggers a preflight. Apps Script cannot answer OPTIONS, so a
+    // preflight is the one thing that would fail outright.
+    fetch(ENDPOINT + "?api=payload&t=" + encodeURIComponent(t), {
+      method: "GET",
+      redirect: "follow"
+    })
+      .then(function (r) { return r.text(); })
+      .then(function (body) {
+        var ms = Date.now() - started;
+        var data;
+        try { data = JSON.parse(body); }
+        catch (err) {
+          show(false, "Reached it, but the response was not JSON",
+               "Usually means the deployment served an HTML error page rather " +
+               "than the endpoint. Check the deployed version.");
+          out.style.display = "block";
+          out.textContent = body.slice(0, 1200);
+          return;
+        }
+
+        if (!data.ok) {
+          show(false, "Endpoint answered, payload refused",
+               "Reason: " + (data.error || "unknown") +
+               ". The cross-origin path itself works, so this is a token or " +
+               "data problem, not a CORS one.");
+        } else {
+          show(true, "It works",
+               "Read " + (data.loads || []).length + " loads and " +
+               (data.drivers || []).length + " drivers for " + data.scac +
+               " from this domain. The form can be served from here.");
+        }
+        timing.textContent = "Round trip: " + ms + " ms";
+        out.style.display = "block";
+        out.textContent = JSON.stringify(data, null, 2).slice(0, 4000);
+      })
+      .catch(function (err) {
+        show(false, "Blocked before the response was readable",
+             "This is the CORS failure we were testing for. The browser " +
+             "either refused the request or would not let us read what came " +
+             "back. Message: " + err.message);
+      });
+  }
+</script>
+</div>
+</body>
+</html>
