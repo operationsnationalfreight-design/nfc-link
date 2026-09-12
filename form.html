@@ -584,6 +584,7 @@
           document.getElementById('ovlmsg').textContent =
             res.message + ' Continue to see it on your board.';
           document.getElementById('ovl').className = 'on';
+          TOUCHED = false;      // their work is in; polling can resume
           return;
         }
         handleSendFailure(res.error || '', payload, attempt, max, st);
@@ -671,15 +672,37 @@
     b.textContent = 'rendered in ' + (Date.now() - window.T0) + ' ms';
     document.getElementById('app').appendChild(b);
     revalidate();
+    startPolling();
   });
 
-  // The first render comes from a cache up to five minutes old, which is what
-  // makes it quick. This asks again without the cache and quietly swaps in the
-  // answer if anything moved, so speed does not cost accuracy.
+  // Keeps the board honest without anyone reloading.
   //
-  // If the carrier has already started typing, it does NOT re-render. Losing
+  // Runs once straight after the first render, then every thirty seconds while
+  // the page is open. A carrier often leaves this sitting on a phone in the
+  // cab for an hour: a driver assigned at the desk in that time should reach
+  // them, not wait for them to think to refresh.
+  //
+  // If the carrier has started typing, it does NOT re-render. Losing
   // half-entered driver details to a background refresh would be far worse
-  // than showing a load that was reassigned ninety seconds ago.
+  // than showing a load that was reassigned ninety seconds ago; they get a
+  // notice instead and choose when.
+  var POLL_MS = 30000;
+  var polling = null;
+
+  function startPolling() {
+    if (polling) return;
+    polling = setInterval(function () {
+      // Nothing to gain polling a tab nobody is looking at.
+      if (document.hidden) return;
+      revalidate();
+    }, POLL_MS);
+  }
+
+  // Catch up the moment they come back to the tab.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) revalidate();
+  });
+
   function revalidate() {
     var before = JSON.stringify(LOADS) + JSON.stringify(ONSITE) +
                  JSON.stringify(DRIVERS);
@@ -695,7 +718,13 @@
         if (after === before) return;
 
         if (TOUCHED) { offerRefresh(); return; }
+
+        // Hold the scroll position across the swap. Re-rendering resets it to
+        // the top, which on a long board throws the carrier back to the
+        // beginning for a change they may not even have noticed.
+        var y = window.scrollY;
         applyPayload(p);
+        window.scrollTo(0, y);
         console.log('[form] quietly updated from fresh data');
       })
       .catch(function () { /* the cached view is still perfectly usable */ });
