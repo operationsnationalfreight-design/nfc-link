@@ -238,6 +238,7 @@
   // expires on its own, so there is nothing to log in to and nothing else to
   // hold. Read exactly as it arrived: one altered character makes it invalid.
   var TOKEN = new URLSearchParams(location.search).get('t') || '';
+  var TOUCHED = false;   // set the moment the carrier edits anything
   var SCAC  = '';
   var LOADS   = [];
   var DRIVERS = [];
@@ -480,6 +481,12 @@
     }
   }
 
+  // Any edit at all. A background refresh must never overwrite work in
+  // progress, so once this is true the quiet update stops applying itself and
+  // offers instead.
+  document.addEventListener('input', function () { TOUCHED = true; });
+  document.addEventListener('change', function () { TOUCHED = true; });
+
   function v(cls, i) {
     var el = document.querySelector('.' + cls + '[data-i="' + i + '"]');
     return el ? el.value.trim() : '';
@@ -663,7 +670,58 @@
     b.style.cssText = 'text-align:center;font-size:12px;color:#888;padding:6px 0 0';
     b.textContent = 'rendered in ' + (Date.now() - window.T0) + ' ms';
     document.getElementById('app').appendChild(b);
+    revalidate();
   });
+
+  // The first render comes from a cache up to five minutes old, which is what
+  // makes it quick. This asks again without the cache and quietly swaps in the
+  // answer if anything moved, so speed does not cost accuracy.
+  //
+  // If the carrier has already started typing, it does NOT re-render. Losing
+  // half-entered driver details to a background refresh would be far worse
+  // than showing a load that was reassigned ninety seconds ago.
+  function revalidate() {
+    var before = JSON.stringify(LOADS) + JSON.stringify(ONSITE) +
+                 JSON.stringify(DRIVERS);
+
+    fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(TOKEN),
+          { method: 'GET', redirect: 'follow' })
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        if (!p.ok) return;
+        var after = JSON.stringify(p.loads || []) +
+                    JSON.stringify(p.onsite || []) +
+                    JSON.stringify(p.drivers || []);
+        if (after === before) return;
+
+        if (TOUCHED) { offerRefresh(); return; }
+        applyPayload(p);
+        console.log('[form] quietly updated from fresh data');
+      })
+      .catch(function () { /* the cached view is still perfectly usable */ });
+  }
+
+  // Something changed underneath a carrier who is mid-edit. Tell them, let
+  // them choose when.
+  function offerRefresh() {
+    if (document.getElementById('stalebar')) return;
+    var bar = document.createElement('div');
+    bar.id = 'stalebar';
+    bar.style.cssText =
+      'position:sticky;top:0;z-index:20;background:#fffaf0;' +
+      'border:1px solid #e8d9ac;color:#7a5c12;border-radius:4px;' +
+      'padding:9px 12px;margin-bottom:10px;font-size:13px;text-align:center;';
+    bar.innerHTML = 'Your board changed since this page opened. ' +
+      '<a href="#" style="color:#7a5c12;font-weight:bold;">Reload it</a>';
+    bar.querySelector('a').onclick = function (ev) {
+      ev.preventDefault();
+      TOUCHED = false;
+      bar.parentNode.removeChild(bar);
+      loadBoard(null, true);
+    };
+    var wrap = document.querySelector('.wrap');
+    wrap.insertBefore(bar, wrap.firstChild);
+  }
 
   // Submissions are serialized server-side. If another carrier holds the lock,
   // keep trying rather than handing the problem back to this one.
