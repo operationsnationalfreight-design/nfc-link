@@ -158,7 +158,7 @@
      between a bar and a truck: one thing, one meaning. The lane is two rules
      with a dashed centre line, which is enough to read as road without
      pretending to be an illustration. */
-  #bar .stage { width: 520px; max-width: 88vw; }
+  #bar .stage { width: 100%; padding: 0 4vw; }
   #bar .lane { position: relative; padding: 10px 0;
                border-top: 2px solid rgba(13,51,32,.3);
                border-bottom: 2px solid rgba(13,51,32,.3); }
@@ -166,8 +166,12 @@
                      top: 50%; height: 2px; margin-top: -1px;
                      background: repeating-linear-gradient(to right,
                        rgba(13,51,32,.28) 0 16px, transparent 16px 30px); }
-  #bar .rig { position: relative; z-index: 1; transform: translateX(-100%);
-              transition: transform .45s ease-out; color: #0d3320; }
+  /* Parked at the start line from the first frame. Animating in from off-screen
+     meant the road appeared, then the truck arrived a beat later, which read as
+     a glitch rather than a departure. */
+  #bar .rig { position: relative; z-index: 1; color: #0d3320;
+              transform: translateX(0);
+              transition: transform .45s ease-out; }
   #bar .rig svg { display: block; width: 190px; height: 104px; }
   @media (prefers-reduced-motion: reduce) {
     #bar .rig { transition: none; }
@@ -722,6 +726,7 @@
   // finishes early and then sits there. Easing toward an asymptote is honest:
   // it says "still going" without claiming to know how much is left.
   var progress = 0;
+  setBar(0);
   var creep = setInterval(function () {
     progress += (90 - progress) * 0.08;
     setBar(progress);
@@ -729,12 +734,16 @@
 
   // The rig travels the width of the stage, offset by its own width so it
   // starts fully off the left edge and arrives with its nose at the end.
-  // Travels the full lane: nose off the left edge at zero, tail clearing the
-  // right at a hundred.
+  // Sits at the start line at zero and finishes with its nose at the far end.
+  // Measured rather than guessed: the lane and the rig are both fluid now, so
+  // a hardcoded offset would overshoot on a wide screen and stop short on a
+  // phone.
   function setBar(pct) {
     var r = document.querySelector('#bar .rig');
-    if (!r) return;
-    r.style.transform = 'translateX(calc(' + pct + '% - ' + pct + '.9px))';
+    var lane = document.querySelector('#bar .lane');
+    if (!r || !lane) return;
+    var travel = lane.clientWidth - r.querySelector('svg').clientWidth;
+    r.style.transform = 'translateX(' + (travel * pct / 100) + 'px)';
   }
 
   function finishBar() {
