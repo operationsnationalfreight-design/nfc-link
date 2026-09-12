@@ -330,22 +330,37 @@
     }
     var t = '<table class="on"><tr><th>Trailer</th><th class="a">Assigned To</th><th>Status</th></tr>';
     ONSITE.forEach(function(o) {
-      var cell;
-      if (o.assignedText) {
-        var parts = o.assignedText.split('\n');
-        cell = '<div style="font-weight:700;">' + esc(parts[0]) + '</div>';
-        if (parts[1]) {
-          cell += '<div style="font-size:11.5px;color:#555;padding-top:2px;">' +
-                  esc(parts[1]) + '</div>';
-        }
+      var cell, state;
+
+      if (o.isReturn) {
+        // A return is not an assignment and not ready equipment. Saying
+        // "loaded" next to a shipment number reads as good to go, when the
+        // trailer actually needs unloading before anyone can use it.
+        cell = '<div style="font-weight:700;">Return delivered</div>' +
+               (o.assignedText
+                 ? '<div style="font-size:11.5px;color:#555;padding-top:2px;">' +
+                   esc(o.assignedText) + '</div>'
+                 : '');
+        state = '<span style="color:#1565c0;font-weight:700;">needs unloading</span>';
       } else {
-        cell = '<span style="color:#999">unassigned</span>';
+        if (o.assignedText) {
+          var parts = o.assignedText.split('\n');
+          cell = '<div style="font-weight:700;">' + esc(parts[0]) + '</div>';
+          if (parts[1]) {
+            cell += '<div style="font-size:11.5px;color:#555;padding-top:2px;">' +
+                    esc(parts[1]) + '</div>';
+          }
+        } else {
+          cell = '<span style="color:#999">unassigned</span>';
+        }
+        state = o.loaded ? '<span class="tick">&#10004; loaded</span>'
+                         : '<span style="color:#999">empty</span>';
       }
-      t += '<tr class="' + (o.loaded ? 'loaded' : '') + '">' +
+
+      t += '<tr class="' + (o.loaded && !o.isReturn ? 'loaded' : '') + '">' +
            '<td><b>' + esc(o.tl) + '</b></td>' +
            '<td class="a">' + cell + '</td>' +
-           '<td>' + (o.loaded ? '<span class="tick">&#10004; loaded</span>'
-              : '<span style="color:#999">empty</span>') + '</td></tr>';
+           '<td>' + state + '</td></tr>';
     });
     h.innerHTML = t + '</table>';
   }
