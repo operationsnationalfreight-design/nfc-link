@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Submit check</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #eef1ef; color: #1c1c1c;
+         font-family: -apple-system, Segoe UI, Arial, sans-serif; font-size: 14px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 17px; color: #0d3320; margin: 0 0 4px; }
+  p.lede { margin: 0 0 18px; color: #555; font-size: 13px; line-height: 1.55; }
+  .warn { background: #fdf6e6; border: 1px solid #e8d9ac; color: #7a5c12;
+          padding: 12px 14px; border-radius: 4px; font-size: 13px;
+          line-height: 1.55; margin-bottom: 18px; }
+  label { display: block; font-size: 11px; font-weight: bold; color: #666;
+          text-transform: uppercase; letter-spacing: .4px; margin: 14px 0 4px; }
+  input { width: 100%; font: inherit; padding: 9px; border: 1px solid #c4c8c6;
+          border-radius: 3px; }
+  button { font: inherit; font-size: 14px; padding: 11px 24px; border-radius: 3px;
+           cursor: pointer; border: 1px solid #0d3320; background: #0d3320;
+           color: #fff; margin-top: 14px; }
+  #verdict { margin-top: 18px; padding: 14px 16px; border-radius: 4px;
+             font-size: 14px; display: none; }
+  #verdict.ok  { display: block; background: #e9f5ec; border: 1px solid #b7dcc2;
+                 color: #1d5c30; }
+  #verdict.bad { display: block; background: #fbeaea; border: 1px solid #e7bcbc;
+                 color: #8a2020; }
+  #verdict b { display: block; margin-bottom: 5px; }
+  pre { background: #fff; border: 1px solid #d8dcda; border-radius: 4px;
+        padding: 12px; overflow: auto; font-size: 12px; line-height: 1.5;
+        margin-top: 14px; }
+  .timing { margin-top: 10px; font-size: 12.5px; color: #555; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Submit check</h1>
+  <p class="lede">
+    Reading worked. This proves the other half: that a page on this domain can
+    write back. It is the half that can fail on a CORS preflight, which Apps
+    Script cannot answer.
+  </p>
+
+  <div class="warn">
+    This writes a real row to CF.INBOX, marked so it is obvious. It goes in as
+    an incoming trailer called <b>CORSTEST</b> with no BOL, so promote would
+    look for a pool tab and skip it rather than touching a load. Delete the row
+    afterwards.
+  </div>
+
+  <label>Form token</label>
+  <input id="tok" placeholder="paste the t= value from a carrier link">
+
+  <button onclick="run()">Send a test submission</button>
+
+  <div id="verdict"></div>
+  <div class="timing" id="timing"></div>
+  <pre id="out" style="display:none;"></pre>
+
+<script>
+  var ENDPOINT = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+
+  function show(ok, title, detail) {
+    var v = document.getElementById("verdict");
+    v.className = ok ? "ok" : "bad";
+    v.innerHTML = "<b>" + title + "</b>" + detail;
+  }
+
+  function run() {
+    var t = document.getElementById("tok").value.trim();
+    var out = document.getElementById("out");
+    var timing = document.getElementById("timing");
+    out.style.display = "none";
+    timing.textContent = "";
+
+    if (!t) { show(false, "No token", "Paste the t= value from any carrier link."); return; }
+
+    show(true, "Sending...", "Posting a test row to CF.INBOX.");
+    var started = Date.now();
+
+    var body = JSON.stringify({
+      api: "submit",
+      t: t,
+      data: {
+        newDrivers: [],
+        driverEdits: [],
+        assignments: [],
+        incoming: [{ tl: "CORSTEST", eta: "cross-origin check" }]
+      }
+    });
+
+    // text/plain is deliberate. application/json would make this a
+    // non-simple request, the browser would send an OPTIONS preflight first,
+    // and Apps Script cannot answer OPTIONS. The body is still JSON; only the
+    // declared type is a lie, and it is the lie that makes this work.
+    fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: body,
+      redirect: "follow"
+    })
+      .then(function (r) { return r.text(); })
+      .then(function (text) {
+        var ms = Date.now() - started;
+        var data;
+        try { data = JSON.parse(text); }
+        catch (err) {
+          show(false, "Got through, but the reply was not JSON",
+               "The POST reached something. Check the deployed version has " +
+               "the submit route.");
+          out.style.display = "block";
+          out.textContent = text.slice(0, 1200);
+          return;
+        }
+
+        if (data.ok) {
+          show(true, "Both halves work",
+               "The row landed on CF.INBOX. Reading and writing from this " +
+               "domain are both proven, so the form can be served from here.");
+        } else {
+          show(false, "Reached it, but it refused",
+               "Reason: " + (data.error || "unknown") +
+               ". The cross-origin path itself works, so this is a token or " +
+               "data problem rather than a browser one.");
+        }
+        timing.textContent = "Round trip: " + ms + " ms";
+        out.style.display = "block";
+        out.textContent = JSON.stringify(data, null, 2);
+      })
+      .catch(function (err) {
+        show(false, "Blocked before the reply was readable",
+             "Either a preflight was sent and went unanswered, or the browser " +
+             "would not let us read the response. Message: " + err.message);
+      });
+  }
+
+  var pre = new URLSearchParams(location.search).get("t");
+  if (pre) document.getElementById("tok").value = pre;
+</script>
+</div>
+</body>
+</html>
