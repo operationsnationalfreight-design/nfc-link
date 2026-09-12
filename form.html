@@ -156,9 +156,9 @@
   /* The rig sits centred over a blurred board. The layout is legible enough
      underneath to read as "your loads are coming" rather than an empty wait,
      but soft enough that nobody tries to interact with a half-built page. */
-  #bar .stage { width: 300px; max-width: 74vw; }
+  #bar .stage { width: 420px; max-width: 84vw; }
   #bar .rig { color: #0d3320; transform: translateX(-100%); }
-  #bar .rig svg { display: block; width: 120px; height: 66px; }
+  #bar .rig svg { display: block; width: 200px; height: 110px; }
   #bar .road { position: relative; height: 3px; margin-top: 6px;
                background: rgba(13,51,32,.12); border-radius: 2px;
                overflow: hidden; }
@@ -184,10 +184,14 @@
     <div class="rig">
       <svg viewBox="0 0 44 24" fill="none" stroke="currentColor" stroke-width="1.7"
            stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 17V5h22v12" fill="#ffffff"/>
+        <image href="https://nationalfreightconnection.com/images/logo.svg"
+               x="3.6" y="6.6" width="18.8" height="8.8"
+               preserveAspectRatio="xMidYMid meet"/>
         <path d="M2 17V5h22v12"/>
-        <path d="M24 9h7l5 5v3h-12z"/>
-        <circle cx="10" cy="18" r="3"/>
-        <circle cx="31" cy="18" r="3"/>
+        <path d="M24 9h7l5 5v3h-12z" fill="#ffffff"/>
+        <circle cx="10" cy="18" r="3" fill="#ffffff"/>
+        <circle cx="31" cy="18" r="3" fill="#ffffff"/>
       </svg>
     </div>
     <div class="road"><div class="fill"></div></div>
@@ -726,7 +730,7 @@
     var r = document.querySelector('#bar .rig');
     if (!f) return;
     f.style.width = pct + '%';
-    r.style.transform = 'translateX(calc(' + pct + '% - 60px))';
+    r.style.transform = 'translateX(calc(' + pct + '% - 100px))';
   }
 
   function finishBar() {
