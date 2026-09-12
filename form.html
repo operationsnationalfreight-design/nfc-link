@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d3320">
+<title>Driver &amp; Equipment Details | National Freight Connection</title>
+<style>
+
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; font-size: 14px;
+         margin: 0; background: #eef1ef; color: #1c1c1c; }
+  .wrap { max-width: 1220px; margin: 0 auto; padding: 14px; }
+  .head { background: #0d3320; color: #fff; padding: 16px; border-radius: 5px;
+          text-align: center; }
+  .head h1 { margin: 0 0 3px; font-size: 20px; letter-spacing: .6px;
+             text-transform: uppercase; }
+  .head .sub { font-size: 13px; opacity: .85; text-transform: uppercase;
+               letter-spacing: 1.2px; }
+  .cols { display: flex; gap: 14px; align-items: flex-start; margin-top: 14px; }
+  .col { flex: 1 1 0; min-width: 0; }
+  .card { background: #fff; border: 1px solid #d8dcda; border-radius: 5px;
+          padding: 12px; margin-bottom: 14px; }
+  .card h2 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase;
+             letter-spacing: .6px; color: #0d3320; }
+  .card .note { margin: 0 0 10px; font-size: 12px; color: #666; }
+
+  .skel { height: 14px; border-radius: 3px; margin: 9px 0;
+          background: linear-gradient(90deg,#e9edeb 25%,#f4f7f5 50%,#e9edeb 75%);
+          background-size: 200% 100%; animation: sh 1.2s infinite; }
+  .skel.w70 { width: 70%; } .skel.w45 { width: 45%; } .skel.w90 { width: 90%; }
+  @keyframes sh { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .dbar { background: #0d3320; color: #fff; font-size: 12px; font-weight: 700;
+          letter-spacing: .8px; text-transform: uppercase; text-align: center;
+          padding: 6px 8px; border-radius: 3px; margin: 16px 0 8px; }
+  .dbar.first { margin-top: 0; }
+
+  .load { border: 1px solid #d8dcda; border-left: 5px solid #bbb;
+          border-radius: 4px; padding: 10px; margin-bottom: 10px; }
+  .load.ok   { border-left-color: #2e7d32; background: #f4fbf5; }
+  .load.need { border-left-color: #c62828; background: #fdf5f5; }
+  .load.lock { border-left-color: #999; background: #f3f3f3; color: #777; }
+  .load.pend { border-left-color: #b8860b; background: #fffaf0; }
+
+  .resched { color: #b8860b; font-weight: 700; }
+  .pendmsg { text-align: center; font-size: 11.5px; color: #8a6d1f;
+             font-weight: 700; padding-bottom: 6px; }
+
+  .lnum { text-align: center; font-weight: 800; font-size: 18px;
+          letter-spacing: .4px; padding: 2px 0 2px; }
+  .lnum .sep { color: #9aa39d; font-weight: 400; margin: 0 6px; }
+  .lnum2 { text-align: center; font-size: 11.5px; font-weight: 400;
+           color: #555; padding-bottom: 8px; letter-spacing: .3px; }
+
+  .split { display: flex; gap: 12px; margin-top: 4px; }
+  .split .left  { flex: 1 1 50%; min-width: 0; display: flex;
+                  flex-direction: column; justify-content: center; }
+  .split .right { flex: 1 1 50%; min-width: 0;
+                  border-left: 1px solid #e0e4e2; padding-left: 12px; }
+  .stops { font-size: 12.5px; color: #333; }
+  .stops b { color: #0d3320; letter-spacing: .4px; }
+  .stops .leg { padding: 1px 0 6px 8px; color: #333; }
+
+  select, input { width: 100%; font-family: inherit; font-size: 14px; padding: 7px;
+                  border: 1px solid #bfc5c2; border-radius: 3px; background: #fff; }
+  label { display: block; font-size: 10.5px; font-weight: 700; color: #666;
+          margin: 6px 0 2px; text-transform: uppercase; letter-spacing: .3px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row2 { display: flex; gap: 7px; }
+  .row2 > div { flex: 1 1 0; min-width: 0; }
+  .dfields { display: none; }
+  .dfields.on { display: block; }
+  .newbox { margin-top: 8px; padding: 9px; border: 1px dashed #a8b8ad;
+            border-radius: 3px; background: #f6faf7; display: none; }
+
+  table.on { width: 100%; border-collapse: collapse; font-size: 12.5px;
+             table-layout: fixed; }
+  table.on th { font-size: 10.5px; text-transform: uppercase; color: #555;
+                border-bottom: 1px solid #d8dcda; padding: 5px 6px;
+                text-align: center; }
+  table.on td { padding: 8px 6px; border-bottom: 1px solid #eee;
+                text-align: center; vertical-align: middle;
+                word-break: break-word; }
+  table.on th.a, table.on td.a { width: 58%; }
+  table.on tr.loaded td { background: #f4fbf5; }
+  .tick { color: #2e7d32; font-weight: 700; }
+
+  .inc { display: flex; gap: 8px; margin-bottom: 7px; }
+  .inc input.tl  { flex: 1 1 42%; }
+  .inc input.eta { flex: 1 1 58%; }
+  .addbtn { background: #fff; color: #0d3320; border: 1px solid #0d3320;
+            font-size: 13px; padding: 7px 12px; border-radius: 3px; cursor: pointer; }
+  .bar { position: sticky; bottom: 0; background: #eef1ef; padding: 12px 0 22px; }
+  button.go { font-size: 16px; padding: 13px 34px; border-radius: 4px;
+              border: 1px solid #0d3320; background: #0d3320; color: #fff;
+              cursor: pointer; width: 100%; }
+  button.go:disabled { opacity: .45; cursor: default; }
+  #status { margin-top: 9px; font-size: 14px; text-align: center; }
+  .ok2 { color: #2e7d32; font-weight: 700; }
+
+  #ovl { display: none; position: fixed; inset: 0; background: rgba(20,28,24,.55);
+         z-index: 50; align-items: center; justify-content: center; padding: 20px; }
+  #ovl.on { display: flex; }
+  #ovlbox { background: #fff; border-radius: 6px; max-width: 420px; width: 100%;
+            padding: 26px 24px; text-align: center;
+            box-shadow: 0 10px 40px rgba(0,0,0,.3); }
+  #ovlbox .tick2 { font-size: 34px; color: #2e7d32; line-height: 1; }
+  #ovlbox h3 { margin: 12px 0 6px; font-size: 18px; color: #0d3320; }
+  #ovlbox p { margin: 0 0 20px; font-size: 14px; color: #555; }
+  #ovlbox button { font-size: 15px; padding: 11px 30px; border-radius: 4px;
+                   border: 1px solid #0d3320; background: #0d3320; color: #fff;
+                   cursor: pointer; width: 100%; }
+  .err { color: #b32020; font-weight: 700; }
+  @media (max-width: 900px) {
+    .wrap { padding: 10px; }
+    .cols { flex-direction: column; }
+    .col, .card, .load { width: 100%; }
+    .split { flex-direction: column; }
+    .split .right { border-left: none; padding-left: 0;
+                    border-top: 1px solid #e0e4e2; padding-top: 8px; }
+  }
+
+  /* Nothing shows until the board has arrived. The splash sits over the wait
+     that already exists rather than adding one, and the form appears complete
+     instead of assembling itself in view. */
+  #splash { min-height: 60vh; display: flex; align-items: center;
+            justify-content: center; }
+  #splash img { width: 320px; max-width: 76vw; opacity: 0;
+                animation: rise 1.6s ease-out forwards; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: .92; transform: none; }
+  }
+  #app { display: none; }
+  #dead { display: none; max-width: 460px; margin: 14vh auto 0; background: #fff;
+          border: 1px solid #d8dcda; border-radius: 6px; padding: 28px 24px;
+          text-align: center; }
+  #dead h2 { margin: 0 0 10px; font-size: 17px; color: #0d3320; }
+  #dead p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #555; }
+  #dead .mail { font-size: 13px; }
+</style>
+</head>
+<body style="background:#0d3320;">
+
+<div id="splash">
+  <img src="https://nationalfreightconnection.com/images/logo.svg"
+       alt="National Freight Connection">
+</div>
+
+<div id="dead"></div>
+
+<div id="app">
+<div class="wrap">
+
+  <div class="head">
+    <h1>Driver &amp; Equipment Details</h1>
+    <div class="sub" id="cname"></div>
+  </div>
+
+  <div class="cols">
+
+    <div class="col">
+      <div class="card">
+        <h2>Trailers On Site</h2>
+        <p class="note">Your equipment currently at our yard.</p>
+        <div id="onsite">
+          <div class="skel w90"></div><div class="skel w70"></div>
+          <div class="skel w90"></div>
+        </div>
+      </div>
+
+      <div class="card" id="inccard" style="display:none;">
+        <h2>Incoming Trailers</h2>
+        <p class="note">Equipment heading to a GEA yard, with expected arrival.</p>
+        <div id="incoming"></div>
+        <button class="addbtn" onclick="addIncoming()">+ Add another</button>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>Loads</h2>
+        <p class="note">Assign or confirm the driver for each load.</p>
+        <div id="loads">
+          <div class="skel w45"></div><div class="skel w90"></div>
+          <div class="skel w70"></div><div class="skel w90"></div>
+          <div class="skel w45"></div><div class="skel w90"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="ovl">
+    <div id="ovlbox">
+      <div class="tick2">&#10004;</div>
+      <h3>Thank you</h3>
+      <p id="ovlmsg"></p>
+      <button id="ovlbtn" onclick="refreshBoard()">Continue</button>
+    </div>
+  </div>
+
+  <div class="bar">
+    <button class="go" id="send" onclick="submitForm()" disabled>Loading...</button>
+    <div id="status"></div>
+  </div>
+
+</div>
+
+</div>
+
+<script>
+  // The carrier form, served from our own domain.
+  //
+  // This is the same form Apps Script renders, with two differences that are
+  // the whole point: there is no Google chrome around it, and the shell comes
+  // off a CDN instead of a cold container. Apps Script keeps the data and the
+  // writes; it just stops owning the page.
+  //
+  // Everything security-relevant is unchanged. The token still proves who the
+  // carrier is, still scopes to one SCAC, still expires on its own. Nothing
+  // here can read anything the old form could not.
+  var API = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+
+
+  // The token is the whole session. It is signed, scopes to one carrier and
+  // expires on its own, so there is nothing to log in to and nothing else to
+  // hold. Read exactly as it arrived: one altered character makes it invalid.
+  var TOKEN = new URLSearchParams(location.search).get('t') || '';
+  var SCAC  = '';
+  var LOADS   = [];
+  var DRIVERS = [];
+  var ONSITE  = [];
+  var POOL    = false;
+  var PENDTL  = [];
+  var INIT    = {};   // what each card was rendered with
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  // HTML text inputs strip CR/LF when you assign .value. CARRIER holds some
+  // CDL numbers with a line break in them, so the raw string and what the box
+  // actually contains differ. Comparing the two produced phantom "driver
+  // updated" rows on submissions where nothing was touched.
+  function inputNorm(x) {
+    return String(x == null ? '' : x).replace(/[\r\n]+/g, '').trim();
+  }
+
+  function byName(n) {
+    for (var i = 0; i < DRIVERS.length; i++) if (DRIVERS[i].name === n) return DRIVERS[i];
+    return null;
+  }
+
+  function renderOnsite() {
+    var h = document.getElementById('onsite');
+    if (!ONSITE.length) {
+      h.innerHTML = '<p class="note">No GEA yard equipment tracked. ' +
+                    'Add incoming equipment below.</p>';
+      return;
+    }
+    var t = '<table class="on"><tr><th>Trailer</th><th class="a">Assigned To</th><th>Status</th></tr>';
+    ONSITE.forEach(function(o) {
+      var cell;
+      if (o.assignedText) {
+        var parts = o.assignedText.split('\n');
+        cell = '<div style="font-weight:700;">' + esc(parts[0]) + '</div>';
+        if (parts[1]) {
+          cell += '<div style="font-size:11.5px;color:#555;padding-top:2px;">' +
+                  esc(parts[1]) + '</div>';
+        }
+      } else {
+        cell = '<span style="color:#999">unassigned</span>';
+      }
+      t += '<tr class="' + (o.loaded ? 'loaded' : '') + '">' +
+           '<td><b>' + esc(o.tl) + '</b></td>' +
+           '<td class="a">' + cell + '</td>' +
+           '<td>' + (o.loaded ? '<span class="tick">&#10004; loaded</span>'
+              : '<span style="color:#999">empty</span>') + '</td></tr>';
+    });
+    h.innerHTML = t + '</table>';
+  }
+
+  // Trailers this carrier already reported that we have not processed yet.
+  function renderPendingTrailers() {
+    if (!PENDTL.length) return;
+    var lines = PENDTL.map(function(t) {
+      return esc(t.tl) + (t.eta ? ' &middot; ' + esc(t.eta) : '');
+    }).join('<br>');
+    document.getElementById('incoming').insertAdjacentHTML('beforebegin',
+      '<p class="note" id="pendtl" style="color:#8a6d1f;font-weight:700;">' +
+      'Received, pending confirmation:<br>' + lines + '</p>');
+  }
+
+  function incRow() {
+    return '<div class="inc"><input class="tl" placeholder="Trailer #">' +
+           '<input class="eta" placeholder="ETA  e.g. 09/12 14:00"></div>';
+  }
+  function addIncoming() {
+    document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
+  }
+
+  function driverOptions(sel) {
+    var h = '<option value="">-- select driver --</option>' +
+            '<option value="__NEW__">+ Add a new driver</option>';
+    DRIVERS.forEach(function(d) {
+      h += '<option value="' + esc(d.name) + '"' +
+           (d.name === sel ? ' selected' : '') + '>' + esc(d.name) + '</option>';
+    });
+    return h;
+  }
+
+  function stopHtml(s) {
+    var out = '';
+    s.forEach(function(x) {
+      out += '<div><b>' + esc(x.type.toUpperCase()) + '</b></div>' +
+             '<div class="leg">' + esc(x.city) + ' &middot; ' +
+             esc(x.date) + ' ' + esc(x.time) + '</div>';
+    });
+    return out;
+  }
+
+  // "2026-09-14" -> "Monday 2026-09-14"
+  function dayLabel(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return iso;
+    var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    var dt = new Date(+m[1], +m[2] - 1, +m[3]);
+    return days[dt.getDay()] + ' ' + iso;
+  }
+
+  function renderLoads() {
+    INIT = {};
+    var host = document.getElementById('loads');
+    if (!LOADS.length) {
+      host.innerHTML = '<p class="note">No upcoming loads on file.</p>';
+      return;
+    }
+    var html = '', lastDate = null, first = true;
+
+    LOADS.forEach(function(l, i) {
+      if (l.delv !== lastDate) {
+        html += '<div class="dbar' + (first ? ' first' : '') + '">Delivering ' +
+                esc(dayLabel(l.delv)) + '</div>';
+        lastDate = l.delv;
+        first = false;
+      }
+
+      // Pending outranks "needs a driver": the carrier has already told us,
+      // we just have not applied it yet.
+      var pend = !l.driver && l.pendingDriver;
+      var cls = l.locked ? 'load lock'
+              : pend      ? 'load pend'
+              : l.driver  ? 'load ok' : 'load need';
+      var d = byName(l.driver) || {};
+      html += '<div class="' + cls + '">';
+      html += '<div class="lnum">' + esc(l.nfc) +
+              '<span class="sep">|</span>' + esc(l.bol) + '</div>';
+
+      var tag = l.resched ? '<span class="resched">RESCHEDULED</span>' : '';
+      var stat = '';
+      if (l.tl) {
+        if (l.gone) {
+          stat = '<span style="color:#1565c0">&#9654; En route &middot; ' +
+                 esc(l.tl) + '</span>';
+        } else if (l.loaded) {
+          stat = '<span style="color:#2e7d32">&#10004; Loaded &middot; ' +
+                 esc(l.tl) + '</span>';
+        } else {
+          stat = 'Trailer ' + esc(l.tl);
+        }
+      }
+      if (tag || stat) {
+        html += '<div class="lnum2">' + tag +
+                (tag && stat ? ' &middot; ' : '') + stat + '</div>';
+      }
+      if (pend) {
+        html += '<div class="pendmsg">Received: ' + esc(l.pendingDriver) +
+                ' &middot; pending confirmation</div>';
+      }
+
+      html += '<div class="split"><div class="left"><div class="stops">' +
+              stopHtml(l.stops) + '</div></div><div class="right">';
+
+      if (l.locked) {
+        html += '<div class="note">Departed from ADC. Contact us for changes.</div>' +
+                '<label>Driver</label><input disabled value="' + esc(l.driver) + '">';
+      } else {
+        html += '<label>Driver</label>' +
+                '<select class="drv" data-i="' + i + '" onchange="onDrv(this)">' +
+                driverOptions(l.driver || l.pendingDriver) + '</select>';
+
+        // Remember exactly what this card is rendered with. On submit we compare
+        // against THIS, not against CARRIER, so a prefill that differs from the
+        // CARRIER record by formatting cannot masquerade as a carrier edit.
+        INIT[i] = {
+          driver: l.driver || l.pendingDriver || '',
+          mobile: inputNorm(l.mobile || d.mobile || ''),
+          dl:     inputNorm(l.dl     || d.dl     || ''),
+          tk:     inputNorm(l.tk     || d.tk     || ''),
+          ltl:    inputNorm(l.tl  || ''),
+          leta:   inputNorm(l.eta || '')
+        };
+
+        html += '<div class="dfields' + ((l.driver || l.pendingDriver) ? ' on' : '') +
+                '" id="df' + i + '">' +
+                '<div class="row2"><div><label>Mobile</label>' +
+                '<input class="em" data-i="' + i + '" value="' +
+                esc(l.mobile || d.mobile || '') + '"></div>' +
+                '<div><label>CDL #</label>' +
+                '<input class="ed" data-i="' + i + '" value="' +
+                esc(l.dl || d.dl || '') + '"></div></div>' +
+                '<div class="row2"><div><label>Truck #</label>' +
+                '<input class="et" data-i="' + i + '" value="' +
+                esc(l.tk || d.tk || '') + '"></div>';
+        html += '<div></div></div></div>';
+
+        html += '<div class="newbox" id="nb' + i + '">' +
+                '<div class="row2"><div><label>Full name</label>' +
+                '<input class="nn" data-i="' + i + '"></div>' +
+                '<div><label>Mobile</label><input class="nm" data-i="' + i + '"></div></div>' +
+                '<div class="row2"><div><label>CDL #</label>' +
+                '<input class="nd" data-i="' + i + '"></div>' +
+                '<div><label>Truck #</label><input class="nt" data-i="' + i + '"></div></div></div>';
+
+        // Trailer and ETA belong to the LOAD, not the driver, so they sit
+        // outside the driver panel. Inside it they vanished the moment someone
+        // chose "Add a new driver", which is exactly when a live-load carrier
+        // is most likely to be telling us about equipment for the first time.
+        if (!POOL) {
+          html += '<div class="row2" style="margin-top:2px;">' +
+                  '<div><label>Trailer</label>' +
+                  '<input class="ltl" data-i="' + i + '" value="' + esc(l.tl) + '"></div>' +
+                  '<div><label>ETA to shipper</label>' +
+                  '<input class="leta" data-i="' + i + '" value="' + esc(l.eta || '') +
+                  '" placeholder="e.g. 0600 9/15"></div></div>';
+        }
+      }
+      html += '</div></div></div>';
+    });
+    host.innerHTML = html;
+  }
+
+  function onDrv(sel) {
+    var i = sel.getAttribute('data-i');
+    var isNew = (sel.value === '__NEW__');
+    var nb = document.getElementById('nb' + i);
+    var df = document.getElementById('df' + i);
+    if (nb) nb.style.display = isNew ? 'block' : 'none';
+    if (df) df.className = 'dfields' + ((sel.value && !isNew) ? ' on' : '');
+    var d = byName(sel.value);
+    if (d) {
+      var m = document.querySelector('.em[data-i="' + i + '"]');
+      var c = document.querySelector('.ed[data-i="' + i + '"]');
+      var t = document.querySelector('.et[data-i="' + i + '"]');
+      if (m) m.value = d.mobile || '';
+      if (c) c.value = d.dl || '';
+      if (t) t.value = d.tk || '';
+      // Picking a driver repopulates these from CARRIER. That is the script
+      // writing, not the carrier, so the baseline moves with it. Read the
+      // values back OUT of the inputs rather than trusting what we just put
+      // in: the browser sanitizes them, and the baseline has to match what
+      // the box really holds.
+      if (INIT[i]) {
+        INIT[i].mobile = m ? m.value : '';
+        INIT[i].dl     = c ? c.value : '';
+        INIT[i].tk     = t ? t.value : '';
+      }
+    }
+  }
+
+  function v(cls, i) {
+    var el = document.querySelector('.' + cls + '[data-i="' + i + '"]');
+    return el ? el.value.trim() : '';
+  }
+
+  function submitForm() {
+    var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [] };
+    var problem = '', seenEdit = {};
+
+    LOADS.forEach(function(l, i) {
+      if (l.locked) return;
+      var sel = document.querySelector('.drv[data-i="' + i + '"]');
+      var val = sel ? sel.value : '';
+
+      if (val === '__NEW__') {
+        var n = v('nn', i);
+        if (!n) { problem = 'Enter a name for the new driver on ' + l.nfc + '.'; return; }
+        p.newDrivers.push({ name: n, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
+        p.assignments.push({ bol: l.bol, driver: n });
+      } else if (val) {
+        var init = INIT[i] || { driver: '', mobile: '', dl: '', tk: '' };
+
+        // Only a real change from what was on screen counts. Comparing against
+        // CARRIER instead produced phantom rows whenever MASTER and CARRIER
+        // held the same number in a different format.
+        if (val !== init.driver) {
+          p.assignments.push({ bol: l.bol, driver: val });
+        }
+
+        var m = v('em', i), dl = v('ed', i), tk = v('et', i);
+        var touched = (m !== inputNorm(init.mobile)) ||
+                      (dl !== inputNorm(init.dl)) ||
+                      (tk !== inputNorm(init.tk));
+        if (touched && !seenEdit[val]) {
+          p.driverEdits.push({ name: val, mobile: m, dl: dl, tk: tk });
+          seenEdit[val] = true;
+        }
+      }
+
+      if (!POOL) {
+        var base = INIT[i] || { ltl: '', leta: '' };
+        var t  = v('ltl', i);
+        var te = v('leta', i);
+        if (t !== inputNorm(base.ltl) || te !== inputNorm(base.leta)) {
+          p.incoming.push({ bol: l.bol, tl: t, eta: te });
+        }
+      }
+    });
+
+    if (POOL) document.querySelectorAll('#incoming .inc').forEach(function(r) {
+      var tl = r.querySelector('.tl').value.trim();
+      var eta = r.querySelector('.eta').value.trim();
+      if (tl) p.incoming.push({ tl: tl, eta: eta });
+    });
+
+    if (problem) {
+      document.getElementById('status').innerHTML = '<span class="err">' + esc(problem) + '</span>';
+      return;
+    }
+    if (!p.newDrivers.length && !p.driverEdits.length &&
+        !p.assignments.length && !p.incoming.length) {
+      document.getElementById('status').innerHTML = '<span class="err">Nothing to send yet.</span>';
+      return;
+    }
+
+    document.getElementById('send').disabled = true;
+    sendWithRetry(p, 0);
+  }
+
+  // Submissions are serialized server-side. If another carrier holds the lock,
+  // keep trying rather than handing the problem back to this one.
+  function sendWithRetry(payload, attempt) {
+    var st = document.getElementById('status');
+    var max = 6;
+
+    st.innerHTML = attempt === 0
+      ? 'Sending...'
+      : '<span style="color:#8a6d1f;">Busy with other traffic. Retrying, attempt ' +
+        (attempt + 1) + ' of ' + max + '...</span>';
+
+    // Content-Type text/plain is deliberate and load-bearing. Declaring JSON
+    // would make this a non-simple request, the browser would send an OPTIONS
+    // preflight first, and Apps Script cannot answer OPTIONS at all. The body
+    // is still JSON; only the declared type differs.
+    fetch(API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ api: 'submit', t: TOKEN, data: payload }),
+      redirect: 'follow'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res.ok) {
+          st.textContent = '';
+          document.getElementById('ovlmsg').textContent =
+            res.message + ' Continue to see it on your board.';
+          document.getElementById('ovl').className = 'on';
+          return;
+        }
+        handleSendFailure(res.error || '', payload, attempt, max, st);
+      })
+      .catch(function (e) {
+        handleSendFailure(e.message || '', payload, attempt, max, st);
+      });
+  }
+
+  // The page lives in Apps Script's sandboxed iframe, so location.reload()
+  // reloads the frame rather than the top window and leaves it blank. Nothing
+  // needs reloading anyway: re-fetch the payload and re-render in place.
+  function applyPayload(p) {
+    p = p || {};
+    LOADS   = p.loads   || [];
+    DRIVERS = p.drivers || [];
+    ONSITE  = p.onsite  || [];
+    POOL    = !!p.pool;
+    PENDTL  = p.pendingTrailers || [];
+
+    // Live-load carriers report equipment on the shipment card, so a pool
+    // list has nowhere to go for them.
+    document.getElementById('inccard').style.display = POOL ? 'block' : 'none';
+
+    document.getElementById('incoming').innerHTML = incRow() + incRow();
+    var old = document.getElementById('pendtl');
+    if (old) old.parentNode.removeChild(old);
+
+    renderOnsite();
+    renderPendingTrailers();
+    renderLoads();
+
+    var b = document.getElementById('send');
+    b.disabled = false;
+    b.textContent = 'Submit';
+    document.getElementById('status').textContent = '';
+  }
+
+  // Reads the board. A plain GET with no custom headers, so the browser
+  // treats it as a simple request and never sends a preflight.
+  function loadBoard(onDone) {
+    fetch(API + '?api=payload&t=' + encodeURIComponent(TOKEN), {
+      method: 'GET',
+      redirect: 'follow'
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        if (!p.ok) { showDead(p.error); return; }
+        SCAC = p.scac || '';
+        document.getElementById('cname').textContent = p.cname || p.scac || '';
+        reveal();
+        applyPayload(p);
+        if (onDone) onDone();
+      })
+      .catch(function (e) {
+        showDead('unreachable', e.message);
+        if (onDone) onDone();
+      });
+  }
+
+  // Continue: pull the board again so the carrier sees their submission come
+  // back as pending, then close the confirmation.
+  function refreshBoard() {
+    var btn = document.getElementById('ovlbtn');
+    btn.disabled = true;
+    btn.textContent = 'Refreshing...';
+    loadBoard(function() {
+      document.getElementById('ovl').className = '';
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+      window.scrollTo(0, 0);
+    });
+  }
+
+  // Nothing is on screen until the board arrives, so the wait sits under our
+  // own brand rather than a half-built form.
+  if (!TOKEN) showDead('missing');
+  else loadBoard();
+
+  // Submissions are serialized server-side. If another carrier holds the lock,
+  // keep trying rather than handing the problem back to this one.
+  function handleSendFailure(msg, payload, attempt, max, st) {
+    var busy = msg.indexOf('BUSY') !== -1 ||
+               msg.indexOf('could not record') !== -1 ||
+               msg.toLowerCase().indexOf('timed out') !== -1 ||
+               msg.toLowerCase().indexOf('failed to fetch') !== -1;
+
+    if (busy && attempt < max - 1) {
+      var wait = 2000 + attempt * 1500;
+      st.innerHTML = '<span style="color:#8a6d1f;">Heavy traffic right now. ' +
+                     'Retrying in ' + Math.round(wait / 1000) + 's...</span>';
+      setTimeout(function () { sendWithRetry(payload, attempt + 1); }, wait);
+      return;
+    }
+
+    st.innerHTML = '<span class="err">' +
+      (busy
+        ? 'Still busy after several tries. Nothing was lost. Please try again ' +
+          'shortly, or email nfc@nationalfreightconnection.com.'
+        : esc(msg)) + '</span>';
+    document.getElementById('send').disabled = false;
+  }
+
+  function reveal() {
+    document.getElementById('splash').style.display = 'none';
+    document.body.style.background = '#eef1ef';
+    document.getElementById('app').style.display = 'block';
+  }
+
+  // One place for every dead end, so a carrier never sees a raw error.
+  function showDead(kind, detail) {
+    var m = {
+      missing:     ['This link is incomplete',
+                    'The code on the end of it is missing, usually because an ' +
+                    'email program split the address across two lines. Open ' +
+                    'the original email and click the button rather than ' +
+                    'copying the address.'],
+      expired:     ['This link has expired',
+                    'Links last 30 days. Reply to any of our emails and we ' +
+                    'will send a fresh one straight away.'],
+      unreachable: ['We could not reach your board',
+                    'This is usually a connection problem rather than anything ' +
+                    'wrong on your end. Try again in a moment.']
+    }[kind] || ['Something went wrong', detail || 'Please try again shortly.'];
+
+    document.getElementById('splash').style.display = 'none';
+    document.getElementById('app').style.display = 'none';
+    var d = document.getElementById('dead');
+    d.style.display = 'block';
+    d.innerHTML =
+      '<h2>' + esc(m[0]) + '</h2><p>' + esc(m[1]) + '</p>' +
+      '<p class="mail"><a href="mailto:nfc@nationalfreightconnection.com">' +
+      'nfc@nationalfreightconnection.com</a></p>';
+  }
+</script>
+</body>
+</html>
