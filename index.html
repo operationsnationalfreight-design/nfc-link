@@ -15,13 +15,20 @@
   /* A brand flash, not a loading screen. The forward fires immediately and
      this is only ever seen for the instant it takes to leave. Anything that
      looks like progress (a spinner, a "please wait") makes a fast redirect
-     feel slower than it is, because the eye reads it as a step. */
-  .mark { text-align: center; opacity: 0; animation: in .18s ease-out forwards; }
-  .mark h1 { margin: 0; font-size: 17px; letter-spacing: 1.4px; font-weight: 700;
-             text-transform: uppercase; line-height: 1.5; }
-  .mark .sub { margin-top: 6px; font-size: 12px; letter-spacing: 2px;
-               text-transform: uppercase; opacity: .6; }
-  @keyframes in { to { opacity: 1; } }
+     feel slower than it is, because the eye reads it as a step.
+
+     The logo is pulled from the live site rather than copied in here, so it
+     never drifts out of step with the brand. */
+  .mark { text-align: center; }
+  .mark img { width: 230px; max-width: 64vw; height: auto; display: block;
+              opacity: 0; animation: rise .9s ease-out forwards; }
+  .mark .sub { margin-top: 14px; font-size: 11px; letter-spacing: 2.6px;
+               text-transform: uppercase; opacity: 0;
+               animation: rise .9s ease-out .14s forwards; }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(7px); }
+    to   { opacity: .92; transform: none; }
+  }
 
   /* Everything below is for when something is actually wrong. Hidden unless
      it is needed. */
@@ -39,7 +46,8 @@
 <body>
 
 <div class="mark" id="mark">
-  <h1>National Freight<br>Connection</h1>
+  <img src="https://nationalfreightconnection.com/images/logo.svg"
+       alt="National Freight Connection">
   <div class="sub">Driver Details</div>
 </div>
 
