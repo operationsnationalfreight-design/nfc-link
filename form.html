@@ -153,20 +153,24 @@
          transition: opacity .5s ease .1s; }
   #bar.done { opacity: 0; }
 
-  /* The rig sits centred over a blurred board. The layout is legible enough
-     underneath to read as "your loads are coming" rather than an empty wait,
-     but soft enough that nobody tries to interact with a half-built page. */
-  #bar .stage { width: 420px; max-width: 84vw; }
-  #bar .rig { color: #0d3320; transform: translateX(-100%); }
-  #bar .rig svg { display: block; width: 200px; height: 110px; }
-  #bar .road { position: relative; height: 3px; margin-top: 6px;
-               background: rgba(13,51,32,.12); border-radius: 2px;
-               overflow: hidden; }
-  #bar .fill { position: absolute; inset: 0 auto 0 0; width: 0;
-               background: #0d3320; border-radius: 2px; }
-  #bar .fill, #bar .rig { transition: width .45s ease-out, transform .45s ease-out; }
+  /* The rig IS the progress indicator. It starts at the left edge of the lane
+     and reaches the right as the data lands, so there is nothing to reconcile
+     between a bar and a truck: one thing, one meaning. The lane is two rules
+     with a dashed centre line, which is enough to read as road without
+     pretending to be an illustration. */
+  #bar .stage { width: 520px; max-width: 88vw; }
+  #bar .lane { position: relative; padding: 10px 0;
+               border-top: 2px solid rgba(13,51,32,.3);
+               border-bottom: 2px solid rgba(13,51,32,.3); }
+  #bar .lane:after { content: ''; position: absolute; left: 0; right: 0;
+                     top: 50%; height: 2px; margin-top: -1px;
+                     background: repeating-linear-gradient(to right,
+                       rgba(13,51,32,.28) 0 16px, transparent 16px 30px); }
+  #bar .rig { position: relative; z-index: 1; transform: translateX(-100%);
+              transition: transform .45s ease-out; color: #0d3320; }
+  #bar .rig svg { display: block; width: 190px; height: 104px; }
   @media (prefers-reduced-motion: reduce) {
-    #bar .fill, #bar .rig { transition: none; }
+    #bar .rig { transition: none; }
   }
   #app { display: block; }
   #dead { display: none; max-width: 460px; margin: 14vh auto 0; background: #fff;
@@ -181,20 +185,20 @@
 
 <div id="bar" aria-hidden="true">
   <div class="stage">
+   <div class="lane">
     <div class="rig">
       <svg viewBox="0 0 44 24" fill="none" stroke="currentColor" stroke-width="1.7"
            stroke-linecap="round" stroke-linejoin="round">
-        <path d="M2 17V5h22v12" fill="#ffffff"/>
+        <path d="M2 17V5h22v12"/>
         <image href="https://nationalfreightconnection.com/images/logo.svg"
                x="3.6" y="6.6" width="18.8" height="8.8"
                preserveAspectRatio="xMidYMid meet"/>
-        <path d="M2 17V5h22v12"/>
-        <path d="M24 9h7l5 5v3h-12z" fill="#ffffff"/>
-        <circle cx="10" cy="18" r="3" fill="#ffffff"/>
-        <circle cx="31" cy="18" r="3" fill="#ffffff"/>
+        <path d="M24 9h7l5 5v3h-12z"/>
+        <circle cx="10" cy="18" r="3"/>
+        <circle cx="31" cy="18" r="3"/>
       </svg>
     </div>
-    <div class="road"><div class="fill"></div></div>
+   </div>
   </div>
 </div>
 
@@ -725,12 +729,12 @@
 
   // The rig travels the width of the stage, offset by its own width so it
   // starts fully off the left edge and arrives with its nose at the end.
+  // Travels the full lane: nose off the left edge at zero, tail clearing the
+  // right at a hundred.
   function setBar(pct) {
-    var f = document.querySelector('#bar .fill');
     var r = document.querySelector('#bar .rig');
-    if (!f) return;
-    f.style.width = pct + '%';
-    r.style.transform = 'translateX(calc(' + pct + '% - 100px))';
+    if (!r) return;
+    r.style.transform = 'translateX(calc(' + pct + '% - ' + pct + '.9px))';
   }
 
   function finishBar() {
