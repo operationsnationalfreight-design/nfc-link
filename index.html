@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>National Freight Connection</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center;
+         justify-content: center; padding: 24px;
+         font-family: -apple-system, Segoe UI, Arial, sans-serif;
+         background: #eef1ef; color: #1c1c1c; }
+  .card { background: #fff; border: 1px solid #d8dcda; border-radius: 6px;
+          max-width: 460px; width: 100%; overflow: hidden;
+          box-shadow: 0 6px 24px rgba(0,0,0,.07); }
+  .head { background: #0d3320; color: #fff; padding: 18px 20px; text-align: center; }
+  .head h1 { margin: 0; font-size: 17px; letter-spacing: .6px;
+             text-transform: uppercase; }
+  .body { padding: 22px 20px 24px; text-align: center; }
+  p { margin: 0 0 14px; font-size: 14px; line-height: 1.55; }
+  .muted { color: #666; font-size: 12.5px; }
+  .spin { width: 26px; height: 26px; margin: 4px auto 16px;
+          border: 3px solid #dfe5e1; border-top-color: #0d3320; border-radius: 50%;
+          animation: r .8s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  a.btn { display: inline-block; background: #0d3320; color: #fff;
+          text-decoration: none; font-size: 15px; font-weight: bold;
+          padding: 12px 26px; border-radius: 4px; margin-top: 4px; }
+  #slow { display: none; margin-top: 18px; padding-top: 16px;
+          border-top: 1px solid #eceeed; }
+  #bad { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head"><h1>National Freight Connection</h1></div>
+  <div class="body">
+
+    <div id="go">
+      <div class="spin"></div>
+      <p>Opening your loads...</p>
+      <div id="slow">
+        <p class="muted">Taking a moment? Use the button.</p>
+        <a class="btn" id="manual" href="#">Open my loads</a>
+        <p class="muted" style="margin-top:16px;">
+          If you land on a Google error page, you are probably signed in to more
+          than one Google account. Open this page in a private browsing window
+          and it will work.
+        </p>
+      </div>
+    </div>
+
+    <div id="bad">
+      <p><b>This link is missing its code.</b></p>
+      <p class="muted">
+        It was most likely broken by an email program splitting it across lines.
+        Open the original email and click the button rather than copying the
+        address, or reply and we will send a fresh one.
+      </p>
+      <p class="muted">
+        <a href="mailto:nfc@nationalfreightconnection.com">
+          nfc@nationalfreightconnection.com</a>
+      </p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Forwarding hop for the carrier form.
+  //
+  // WHY THIS EXISTS
+  //   The form lives on an Apps Script deployment whose URL is long, opaque,
+  //   and pinned inside four separate projects. Replace that deployment and
+  //   every link in every email already sent goes dead, with four projects to
+  //   edit before anything works again. Pointing those projects here means the
+  //   deployment URL lives in ONE file: change the line below and every
+  //   historical link keeps working.
+  //
+  //   It also gives us somewhere to say something useful when a carrier hits
+  //   the multi-account Google error, which we cannot catch server-side
+  //   because the rewrite happens in their browser before the request is sent.
+
+  var TARGET = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+
+  // Pass the whole query string through untouched. The token is signed, so a
+  // single altered character makes it invalid.
+  var qs = window.location.search || "";
+  var hasToken = /[?&]t=[^&]+/.test(qs);
+
+  if (!hasToken) {
+    document.getElementById("go").style.display = "none";
+    document.getElementById("bad").style.display = "block";
+  } else {
+    var dest = TARGET + qs;
+    document.getElementById("manual").href = dest;
+
+    // Offer the manual button if the redirect has not taken hold quickly.
+    setTimeout(function () {
+      var s = document.getElementById("slow");
+      if (s) s.style.display = "block";
+    }, 2500);
+
+    // replace() rather than assign(), so Back returns to the email rather
+    // than bouncing through this page again.
+    window.location.replace(dest);
+  }
+</script>
+</body>
+</html>
