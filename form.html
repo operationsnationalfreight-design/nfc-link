@@ -103,6 +103,10 @@
      the page was still scrolling toward it, and a background revalidate a
      second later rebuilt the card and killed it. By the time anyone looked at
      the field it had been and gone. */
+  tr.jump { cursor: pointer; }
+  tr.jump:hover td { background: #eef4f0; }
+  tr.jump td:first-child b { border-bottom: 1px dotted #9aa7a0; }
+
   .pulse {
     animation: spot 1.5s ease-in-out 3;
     border-color: #2e7d32 !important;
@@ -426,7 +430,15 @@
                          : '<span style="color:#999">empty</span>';
       }
 
-      t += '<tr class="' + (o.loaded && !o.isReturn ? 'loaded' : '') + '">' +
+      // A trailer with a load behind it is a link to that load. Reviewing the
+      // yard and assigning drivers are the same job from two directions, and
+      // scrolling a long board to find the shipment a trailer belongs to was
+      // the tedious half of it.
+      var jumpable = !!o.bol && !o.isReturn;
+      t += '<tr class="' + (o.loaded && !o.isReturn ? 'loaded' : '') +
+           (jumpable ? ' jump' : '') + '"' +
+           (jumpable ? ' data-bol="' + esc(o.bol) + '" title="Go to this shipment"' : '') +
+           '>' +
            '<td><b>' + esc(o.tl) + '</b></td>' +
            '<td class="a">' + cell + '</td>' +
            '<td>' + state + '</td></tr>';
@@ -508,7 +520,7 @@
               : pend      ? 'load pend'
               : l.driver  ? 'load ok' : 'load need';
       var d = byName(l.driver) || {};
-      html += '<div class="' + cls + '"' +
+      html += '<div class="' + cls + '" data-bol="' + esc(l.bol) + '"' +
               (isSpot(l.bol) ? ' id="spotload"' : '') + '>';
       html += '<div class="lnum">' + esc(l.nfc) +
               '<span class="sep">|</span>' + esc(l.bol) + '</div>';
@@ -606,6 +618,35 @@
   // innerHTML looks right but the browser has not finished layout, so the
   // element's position is still zero and the scroll goes nowhere. Waiting for
   // paint is the difference between working and appearing to do nothing.
+  // Scrolls to a load card by BOL and pulses its driver field. Shared by the
+  // loaded-notification jump and by clicking a trailer in the onsite panel.
+  function goToLoad(bol) {
+    var want = String(bol || '').trim().toUpperCase();
+    if (!want) return false;
+
+    var cards = document.querySelectorAll('#loads .load');
+    var el = null;
+    for (var i = 0; i < cards.length; i++) {
+      if (String(cards[i].getAttribute('data-bol') || '').toUpperCase() === want) {
+        el = cards[i]; break;
+      }
+    }
+    if (!el) { console.log('[form] no card for ' + want); return false; }
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function () { pulseDriver(el); }, 320);
+    return true;
+  }
+
+  // Delegated, not per-row: the panel is rebuilt on every refresh and per-row
+  // handlers would have to be re-attached each time.
+  document.addEventListener('click', function (ev) {
+    var tr = ev.target && ev.target.closest ? ev.target.closest('tr.jump') : null;
+    if (!tr) return;
+    var bol = tr.getAttribute('data-bol');
+    if (bol) goToLoad(bol);
+  });
+
   function scrollToSpot() {
     var el = document.getElementById('spotload');
     if (!el) {
