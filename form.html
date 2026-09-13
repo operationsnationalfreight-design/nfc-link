@@ -613,6 +613,26 @@
                   ' (not this carrier, or already departed)');
       return;
     }
+
+    // Only jump when there is something to do.
+    //
+    // The point of the jump is to put the carrier in front of a field that
+    // needs filling in. If the driver is already assigned, or a submission is
+    // sitting pending, hauling them down the page and flashing at them says
+    // "act on this" about something already handled. Worse, it does it every
+    // time they open the link from that email, so a carrier who sorted it
+    // yesterday gets summoned again today.
+    var load = null;
+    for (var i = 0; i < LOADS.length; i++) {
+      if (isSpot(LOADS[i].bol)) { load = LOADS[i]; break; }
+    }
+    if (load && (load.driver || load.pendingDriver)) {
+      SPOTTED = true;
+      console.log('[form] spotlight: ' + SPOT + ' already has a driver (' +
+                  (load.pendingDriver || load.driver) + '), not jumping');
+      return;
+    }
+
     SPOTTED = true;
 
     requestAnimationFrame(function () {
