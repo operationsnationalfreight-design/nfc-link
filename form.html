@@ -12,13 +12,41 @@
   // parsed. The request is the slow part by an order of magnitude, so it
   // should be in flight while the browser is still building the page rather
   // than waiting for a script tag at the bottom.
-  window.API = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+  window.API  = "https://script.google.com/macros/s/AKfycbye9ik0EjwQMQcAdf6xeKDRoQXHudRp-DP0tD6cg5dmimt4cyTfL0JxrSow-MrkgH2DXA/exec";
+  window.EDGE = "https://edge.nationalfreightconnection.com";
   window.T0 = Date.now();
+
   var _t = new URLSearchParams(location.search).get('t') || '';
-  window.BOARD = _t
-    ? fetch(window.API + '?api=payload&t=' + encodeURIComponent(_t),
-            { method: 'GET', redirect: 'follow' }).then(function (r) { return r.json(); })
-    : Promise.resolve({ ok: false, error: 'missing' });
+
+  // EDGE FIRST, APPS SCRIPT AS THE FALLBACK.
+  //
+  // The edge holds a copy of this carrier's board, pushed whenever we change
+  // it, and answers in tens of milliseconds. Apps Script has to start a
+  // container and read Sheets: 1.5 seconds warm, four cold, every visit.
+  //
+  // The fallback is not decoration. It runs whenever the edge has nothing for
+  // this carrier yet, has let the entry expire, or cannot be reached at all,
+  // and it is the reason a broken cache degrades into slowness rather than
+  // into a carrier who cannot see their loads.
+  function _appsScript(t) {
+    return fetch(window.API + '?api=payload&t=' + encodeURIComponent(t),
+                 { method: 'GET', redirect: 'follow' })
+             .then(function (r) { return r.json(); });
+  }
+
+  window.BOARD = !_t
+    ? Promise.resolve({ ok: false, error: 'missing' })
+    : fetch(window.EDGE + '/payload?t=' + encodeURIComponent(_t),
+            { method: 'GET' })
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          if (p && p.ok) return p;
+          // "expired" is a real answer and means the token is dead: going to
+          // Apps Script would only get the same verdict more slowly.
+          if (p && p.error === 'expired') return p;
+          return _appsScript(_t);
+        })
+        .catch(function () { return _appsScript(_t); });
 </script>
 <title>Driver &amp; Equipment Details | National Freight Connection</title>
 <link rel="icon" type="image/svg+xml" href="https://nationalfreightconnection.com/images/favicon.svg">
@@ -331,6 +359,8 @@
   var SPOT = (new URLSearchParams(location.search).get('b') || '')
                .trim().toUpperCase();
   var SPOTTED = false;   // only jump once, not on every background refresh
+  var LAST_EDGE = false; // which path answered, for the console line
+  var LAST_AGE  = 0;
 
   function isSpot(bol) {
     return !!SPOT && String(bol || '').trim().toUpperCase() === SPOT;
@@ -806,6 +836,8 @@
     p
       .then(function (p) {
         if (!p.ok) { showDead(p.error); return; }
+        LAST_EDGE = !!p.edge;
+        LAST_AGE  = p.age || 0;
         SCAC = p.scac || '';
         document.getElementById('cname').textContent = p.cname || p.scac || '';
         reveal();
@@ -870,7 +902,9 @@
   if (!TOKEN) showDead('missing');
   else loadBoard(function () {
     finishBar();
-    console.log('[form] board ready in ' + (Date.now() - window.T0) + 'ms');
+    console.log('[form] board ready in ' + (Date.now() - window.T0) + 'ms' +
+                (LAST_EDGE ? ' (edge, ' + Math.round(LAST_AGE / 1000) + 's old)'
+                           : ' (apps script)'));
     revalidate();
     startPolling();
   });
@@ -907,6 +941,9 @@
     var before = JSON.stringify(LOADS) + JSON.stringify(ONSITE) +
                  JSON.stringify(DRIVERS);
 
+    // Straight to Apps Script, deliberately. This call exists to get the
+    // authoritative answer, and asking a cache whether the cache is right
+    // would defeat the entire point of asking.
     fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(TOKEN),
           { method: 'GET', redirect: 'follow' })
       .then(function (r) { return r.json(); })
