@@ -61,16 +61,32 @@
   .load.need { border-left-color: #c62828; background: #fdf5f5; }
   .load.lock { border-left-color: #999; background: #f3f3f3; color: #777; }
 
-  /* The shipment a loaded notification was about. Slow and quiet on purpose:
-     this is a "here it is", not an alarm, and it stops on its own rather than
-     pulsing at someone for the whole time they are filling the form in. */
-  .load.spot { animation: spot 2.4s ease-in-out 3; }
+  /* The shipment a loaded notification was about.
+     
+     The pulse is on the DRIVER FIELD, not the card. A glow around the whole
+     card says "this one", which they already knew from the email. A glow on
+     the driver box says "this is the thing to fill in", which is the entire
+     reason they opened the link.
+     
+     Three pulses then it stops. This is a "here it is", not an alarm, and
+     something blinking for the whole time they are typing wears thin fast. */
+  .load.spot select.drv,
+  .load.spot input[disabled] {
+    animation: spot 1.6s ease-in-out 3;
+    border-color: #2e7d32;
+  }
   @keyframes spot {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(13,51,32,0); }
-    50%      { box-shadow: 0 0 0 5px rgba(13,51,32,.13); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(46,125,50,0);
+               background-color: #ffffff; }
+    50%      { box-shadow: 0 0 0 6px rgba(46,125,50,.28);
+               background-color: #f0f9f2; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .load.spot { animation: none; box-shadow: 0 0 0 3px rgba(13,51,32,.16); }
+    .load.spot select.drv,
+    .load.spot input[disabled] {
+      animation: none;
+      box-shadow: 0 0 0 4px rgba(46,125,50,.25);
+    }
   }
   .load.pend { border-left-color: #b8860b; background: #fffaf0; }
 
