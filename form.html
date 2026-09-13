@@ -60,6 +60,18 @@
   .load.ok   { border-left-color: #2e7d32; background: #f4fbf5; }
   .load.need { border-left-color: #c62828; background: #fdf5f5; }
   .load.lock { border-left-color: #999; background: #f3f3f3; color: #777; }
+
+  /* The shipment a loaded notification was about. Slow and quiet on purpose:
+     this is a "here it is", not an alarm, and it stops on its own rather than
+     pulsing at someone for the whole time they are filling the form in. */
+  .load.spot { animation: spot 2.4s ease-in-out 3; }
+  @keyframes spot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(13,51,32,0); }
+    50%      { box-shadow: 0 0 0 5px rgba(13,51,32,.13); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .load.spot { animation: none; box-shadow: 0 0 0 3px rgba(13,51,32,.16); }
+  }
   .load.pend { border-left-color: #b8860b; background: #fffaf0; }
 
   .resched { color: #b8860b; font-weight: 700; }
@@ -296,6 +308,10 @@
   // hold. Read exactly as it arrived: one altered character makes it invalid.
   var TOKEN = new URLSearchParams(location.search).get('t') || '';
   var TOUCHED = false;   // set the moment the carrier edits anything
+
+  // The shipment a loaded notification pointed at, if this link came from one.
+  var SPOT = new URLSearchParams(location.search).get('b') || '';
+  var SPOTTED = false;   // only jump once, not on every background refresh
   var SCAC  = '';
   var LOADS   = [];
   var DRIVERS = [];
@@ -438,8 +454,10 @@
       var cls = l.locked ? 'load lock'
               : pend      ? 'load pend'
               : l.driver  ? 'load ok' : 'load need';
+      if (SPOT && l.bol === SPOT) cls += ' spot';
       var d = byName(l.driver) || {};
-      html += '<div class="' + cls + '">';
+      html += '<div class="' + cls + '"' +
+              (SPOT && l.bol === SPOT ? ' id="spotload"' : '') + '>';
       html += '<div class="lnum">' + esc(l.nfc) +
               '<span class="sep">|</span>' + esc(l.bol) + '</div>';
 
@@ -526,6 +544,19 @@
       html += '</div></div></div>';
     });
     host.innerHTML = html;
+
+    // Scroll to it once the card is actually in the DOM. Centred rather than
+    // pinned to the top, so the cards either side stay visible and it reads as
+    // one load among several rather than the only one.
+    if (SPOT && !SPOTTED) {
+      var el = document.getElementById('spotload');
+      if (el) {
+        SPOTTED = true;
+        setTimeout(function () {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 120);
+      }
+    }
   }
 
   function onDrv(sel) {
