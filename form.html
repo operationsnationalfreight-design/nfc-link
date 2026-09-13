@@ -310,8 +310,17 @@
   var TOUCHED = false;   // set the moment the carrier edits anything
 
   // The shipment a loaded notification pointed at, if this link came from one.
-  var SPOT = new URLSearchParams(location.search).get('b') || '';
+  //
+  // Compared loosely. An exact match meant a stray space or a different case
+  // between the URL and MASTER silently did nothing, and "silently did
+  // nothing" is indistinguishable from "the feature is broken".
+  var SPOT = (new URLSearchParams(location.search).get('b') || '')
+               .trim().toUpperCase();
   var SPOTTED = false;   // only jump once, not on every background refresh
+
+  function isSpot(bol) {
+    return !!SPOT && String(bol || '').trim().toUpperCase() === SPOT;
+  }
   var SCAC  = '';
   var LOADS   = [];
   var DRIVERS = [];
@@ -454,10 +463,10 @@
       var cls = l.locked ? 'load lock'
               : pend      ? 'load pend'
               : l.driver  ? 'load ok' : 'load need';
-      if (SPOT && l.bol === SPOT) cls += ' spot';
+      if (isSpot(l.bol)) cls += ' spot';
       var d = byName(l.driver) || {};
       html += '<div class="' + cls + '"' +
-              (SPOT && l.bol === SPOT ? ' id="spotload"' : '') + '>';
+              (isSpot(l.bol) ? ' id="spotload"' : '') + '>';
       html += '<div class="lnum">' + esc(l.nfc) +
               '<span class="sep">|</span>' + esc(l.bol) + '</div>';
 
@@ -545,18 +554,48 @@
     });
     host.innerHTML = html;
 
-    // Scroll to it once the card is actually in the DOM. Centred rather than
-    // pinned to the top, so the cards either side stay visible and it reads as
-    // one load among several rather than the only one.
-    if (SPOT && !SPOTTED) {
-      var el = document.getElementById('spotload');
-      if (el) {
-        SPOTTED = true;
-        setTimeout(function () {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 120);
-      }
+    if (SPOT && !SPOTTED) scrollToSpot();
+  }
+
+  // Scrolls to the flagged card once it is actually laid out.
+  //
+  // Two frames, then a delay. Calling scrollIntoView the instant after
+  // innerHTML looks right but the browser has not finished layout, so the
+  // element's position is still zero and the scroll goes nowhere. Waiting for
+  // paint is the difference between working and appearing to do nothing.
+  function scrollToSpot() {
+    var el = document.getElementById('spotload');
+    if (!el) {
+      console.log('[form] spotlight: no card for ' + SPOT +
+                  ' (not this carrier, or already departed)');
+      return;
     }
+    SPOTTED = true;
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        setTimeout(function () {
+          var before = window.scrollY;
+          try {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } catch (e) {
+            el.scrollIntoView(true);
+          }
+
+          // Some browsers ignore smooth scrolling inside a page that is still
+          // settling. If nothing moved, do it by hand.
+          setTimeout(function () {
+            if (Math.abs(window.scrollY - before) > 4) return;
+            var box = el.getBoundingClientRect();
+            var target = window.scrollY + box.top - (window.innerHeight / 2) +
+                         (box.height / 2);
+            window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
+          }, 400);
+
+          console.log('[form] spotlight: jumped to ' + SPOT);
+        }, 60);
+      });
+    });
   }
 
   function onDrv(sel) {
