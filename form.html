@@ -164,8 +164,12 @@
   .tick { color: #2e7d32; font-weight: 700; }
 
   .inc { display: flex; gap: 8px; margin-bottom: 7px; }
-  .inc input.tl  { flex: 1 1 42%; }
-  .inc input.eta { flex: 1 1 58%; }
+  .inc input.tl  { flex: 1 1 38%; }
+  .inc input.ed  { flex: 1 1 36%; }
+  .inc input.et2 { flex: 1 1 26%; }
+  /* Date and time pickers render taller than a text input on some browsers,
+     which left the row ragged. */
+  .inc input { min-height: 38px; }
   .addbtn { background: #fff; color: #0d3320; border: 1px solid #0d3320;
             font-size: 13px; padding: 7px 12px; border-radius: 3px; cursor: pointer; }
   .bar { position: sticky; bottom: 0; background: #eef1ef; padding: 12px 0 22px; }
@@ -457,9 +461,52 @@
       'Received, pending confirmation:<br>' + lines + '</p>');
   }
 
+  // ETA as two native pickers rather than one free-text box.
+  //
+  // A single field invited prose: "will advise", "tomorrow am", "waiting on
+  // driver". Those are reasonable things for a carrier to say and useless in
+  // MASTER column K, which everything downstream reads as a time. Splitting it
+  // into a date and a time means the browser supplies the keyboard and the
+  // format, and there is nothing to mistype.
+  //
+  // Stored and submitted in the format the sheet already uses: "0600 09/15".
+  function etaJoin(dateVal, timeVal) {
+    var d = String(dateVal || '').trim();
+    var t = String(timeVal || '').trim();
+    if (!d && !t) return '';
+
+    var hhmm = t ? t.replace(':', '') : '';
+    if (!d) return hhmm;
+
+    var bits = d.split('-');          // yyyy-mm-dd from a date input
+    if (bits.length !== 3) return hhmm;
+    var md = bits[1] + '/' + bits[2];
+    return hhmm ? hhmm + ' ' + md : md;
+  }
+
+  // Back the other way, to prefill from whatever is already on the sheet.
+  // Anything that does not parse leaves the pickers empty rather than
+  // guessing, so a note someone typed previously is not silently reshaped.
+  function etaSplit(v) {
+    var s = String(v || '').trim();
+    var out = { date: '', time: '' };
+    if (!s) return out;
+
+    var mt = s.match(/(^|\s)([01]?\d|2[0-3]):?([0-5]\d)(\s|$)/);
+    if (mt) out.time = ('0' + mt[2]).slice(-2) + ':' + mt[3];
+
+    var md = s.match(/(^|\s)(\d{1,2})\/(\d{1,2})(\s|$)/);
+    if (md) {
+      var yr = new Date().getFullYear();
+      out.date = yr + '-' + ('0' + md[2]).slice(-2) + '-' + ('0' + md[3]).slice(-2);
+    }
+    return out;
+  }
+
   function incRow() {
     return '<div class="inc"><input class="tl" placeholder="Trailer #">' +
-           '<input class="eta" placeholder="ETA  e.g. 09/12 14:00"></div>';
+           '<input class="ed" type="date" title="ETA date">' +
+           '<input class="et2" type="time" title="ETA time"></div>';
   }
   function addIncoming() {
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
@@ -604,8 +651,12 @@
                   '<div><label>Trailer</label>' +
                   '<input class="ltl" data-i="' + i + '" value="' + esc(l.tl) + '"></div>' +
                   '<div><label>ETA to shipper</label>' +
-                  '<input class="leta" data-i="' + i + '" value="' + esc(l.eta || '') +
-                  '" placeholder="e.g. 0600 9/15"></div></div>';
+                  '<div class="row2" style="gap:6px;">' +
+                  '<input class="letad" type="date" data-i="' + i +
+                  '" value="' + esc(etaSplit(l.eta).date) + '">' +
+                  '<input class="letat" type="time" data-i="' + i +
+                  '" value="' + esc(etaSplit(l.eta).time) + '">' +
+                  '</div></div></div>';
         }
       }
       html += '</div></div></div>';
@@ -855,8 +906,15 @@
       if (!POOL) {
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
-        var te = v('leta', i);
-        if (t !== inputNorm(base.ltl) || te !== inputNorm(base.leta)) {
+        var te = etaJoin(v('letad', i), v('letat', i));
+        // If what was on the sheet could not be parsed into the pickers,
+        // an empty pair means "we could not show it", not "clear it". Treating
+        // that as a change would wipe a note somebody deliberately left.
+        var etaUnparsed = base.leta && !etaSplit(base.leta).date &&
+                          !etaSplit(base.leta).time;
+        var etaChanged = te !== inputNorm(base.leta) && !(etaUnparsed && !te);
+
+        if (t !== inputNorm(base.ltl) || etaChanged) {
           p.incoming.push({ bol: l.bol, tl: t, eta: te });
         }
       }
@@ -864,7 +922,8 @@
 
     if (POOL) document.querySelectorAll('#incoming .inc').forEach(function(r) {
       var tl = r.querySelector('.tl').value.trim();
-      var eta = r.querySelector('.eta').value.trim();
+      var eta = etaJoin(r.querySelector('.ed').value,
+                        r.querySelector('.et2').value);
       if (tl) p.incoming.push({ tl: tl, eta: eta });
     });
 
