@@ -906,7 +906,15 @@
       if (!POOL) {
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
-        var te = etaJoin(v('letad', i), v('letat', i));
+        // Both or neither. Half an ETA is the commonest way this goes wrong:
+        // a carrier picks the date, gets distracted, and we end up with
+        // "09/15" on a load where the yard needs a time to plan around.
+        var ed = v('letad', i), et = v('letat', i);
+        if ((ed && !et) || (!ed && et)) {
+          problem = 'Trailer ETA on ' + l.nfc + ' needs both a date and a time.';
+          return;
+        }
+        var te = etaJoin(ed, et);
         // If what was on the sheet could not be parsed into the pickers,
         // an empty pair means "we could not show it", not "clear it". Treating
         // that as a change would wipe a note somebody deliberately left.
@@ -922,8 +930,14 @@
 
     if (POOL) document.querySelectorAll('#incoming .inc').forEach(function(r) {
       var tl = r.querySelector('.tl').value.trim();
-      var eta = etaJoin(r.querySelector('.ed').value,
-                        r.querySelector('.et2').value);
+      var pd = r.querySelector('.ed').value;
+      var pt = r.querySelector('.et2').value;
+      if ((pd && !pt) || (!pd && pt)) {
+        problem = 'Incoming trailer ' + (tl || '') +
+                  ' needs both a date and a time for its ETA.';
+        return;
+      }
+      var eta = etaJoin(pd, pt);
       if (tl) p.incoming.push({ tl: tl, eta: eta });
     });
 
