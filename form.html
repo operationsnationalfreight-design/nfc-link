@@ -516,9 +516,9 @@
       // empty driver left a swap looking untouched: the card stayed green with
       // the old name and nothing showed the submission had landed.
       var pend = l.pendingDriver && l.pendingDriver !== l.driver;
-      var cls = l.locked ? 'load lock'
-              : pend      ? 'load pend'
-              : l.driver  ? 'load ok' : 'load need';
+      var cls = pend     ? 'load pend'
+              : l.gone     ? 'load lock'
+              : l.driver   ? 'load ok' : 'load need';
       var d = byName(l.driver) || {};
       html += '<div class="' + cls + '" data-bol="' + esc(l.bol) + '"' +
               (isSpot(l.bol) ? ' id="spotload"' : '') + '>';
@@ -551,10 +551,13 @@
       html += '<div class="split"><div class="left"><div class="stops">' +
               stopHtml(l.stops) + '</div></div><div class="right">';
 
-      if (l.locked) {
-        html += '<div class="note">Departed from ADC. Contact us for changes.</div>' +
-                '<label>Driver</label><input disabled value="' + esc(l.driver) + '">';
-      } else {
+      if (l.gone) {
+        // Editable, but say what happens: a change here does not silently
+        // rewrite a load that is already moving, it comes to us first.
+        html += '<div class="note">Departed from ADC. A change here comes to ' +
+                'us for review rather than updating the load directly.</div>';
+      }
+      {
         html += '<label>Driver</label>' +
                 '<select class="drv" data-i="' + i + '" onchange="onDrv(this)">' +
                 driverOptions(l.pendingDriver || l.driver) + '</select>';
@@ -758,7 +761,7 @@
     var problem = '', seenEdit = {};
 
     LOADS.forEach(function(l, i) {
-      if (l.locked) return;
+      // Departed loads are submittable now; they land as pending for review.
       var sel = document.querySelector('.drv[data-i="' + i + '"]');
       var val = sel ? sel.value : '';
 
