@@ -768,6 +768,21 @@
       if (val === '__NEW__') {
         var n = v('nn', i);
         if (!n) { problem = 'Enter a name for the new driver on ' + l.nfc + '.'; return; }
+
+        // A driver is not usable to us without all three. The mobile is how we
+        // and the shipper reach them, the CDL is what the guard gate checks,
+        // and the truck number is how the yard finds them. A name alone
+        // becomes a phone call to the carrier later, which is the thing this
+        // form exists to prevent.
+        var miss = [];
+        if (!v('nm', i)) miss.push('mobile number');
+        if (!v('nd', i)) miss.push('CDL number');
+        if (!v('nt', i)) miss.push('truck number');
+        if (miss.length) {
+          problem = n + ' needs a ' + miss.join(', a ') + ' before we can use them.';
+          return;
+        }
+
         p.newDrivers.push({ name: n, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
         p.assignments.push({ bol: l.bol, driver: n });
       } else if (val) {
@@ -781,6 +796,20 @@
         }
 
         var m = v('em', i), dl = v('ed', i), tk = v('et', i);
+
+        // Same rule for an existing driver. Most are complete already, but a
+        // record predating this form can be missing a field, and assigning
+        // them is the moment it matters rather than the moment it is noticed.
+        var gaps = [];
+        if (!m)  gaps.push('mobile number');
+        if (!dl) gaps.push('CDL number');
+        if (!tk) gaps.push('truck number');
+        if (gaps.length) {
+          problem = val + ' is missing a ' + gaps.join(', a ') +
+                    '. Fill it in on ' + l.nfc + ' and submit again.';
+          return;
+        }
+
         var touched = (m !== inputNorm(init.mobile)) ||
                       (dl !== inputNorm(init.dl)) ||
                       (tk !== inputNorm(init.tk));
