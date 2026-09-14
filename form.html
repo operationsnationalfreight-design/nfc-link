@@ -760,10 +760,43 @@
     var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [] };
     var problem = '', seenEdit = {};
 
+    // A driver can run several loads. They cannot be in two places on the
+    // same day.
+    //
+    // Nothing checked this before, so a carrier could put one driver on two
+    // shipments both delivering Tuesday and it would apply cleanly, with the
+    // clash surfacing as a missed appointment rather than as an error.
+    //
+    // Tracked by delivery date, and it includes drivers ALREADY on other
+    // loads, not just ones being assigned in this submission: most clashes
+    // come from adding a second load to a driver who was already working.
+    var dayOf = {};
+    LOADS.forEach(function (ld, k) {
+      var sl = document.querySelector('.drv[data-i="' + k + '"]');
+      var name = sl ? (sl.value === '__NEW__' ? v('nn', k) : sl.value)
+                    : (ld.pendingDriver || ld.driver);
+      if (!name || !ld.delv) return;
+      var key = name + '|' + ld.delv;
+      if (!dayOf[key]) dayOf[key] = [];
+      dayOf[key].push(ld.nfc || ld.bol);
+    });
+
     LOADS.forEach(function(l, i) {
       // Departed loads are submittable now; they land as pending for review.
       var sel = document.querySelector('.drv[data-i="' + i + '"]');
       var val = sel ? sel.value : '';
+
+      // Same day, same driver, two loads.
+      var who = (val === '__NEW__') ? v('nn', i) : val;
+      if (who && l.delv) {
+        var clash = dayOf[who + '|' + l.delv] || [];
+        if (clash.length > 1) {
+          problem = who + ' is on ' + clash.length + ' loads delivering ' +
+                    l.delv + ' (' + clash.join(', ') + '). ' +
+                    'Pick a different driver for one of them.';
+          return;
+        }
+      }
 
       if (val === '__NEW__') {
         var n = v('nn', i);
