@@ -89,6 +89,15 @@
   .load.need { border-left-color: #c62828; background: #fdf5f5; }
   .load.lock { border-left-color: #999; background: #f3f3f3; color: #777; }
 
+  /* Bringing their own trailer for one load. Pool carriers normally take
+     whatever we have in the yard, so this is them telling us not to reserve
+     one. */
+  .livebox { display: flex; align-items: center; gap: 6px; font-size: 13px;
+             color: #444; margin: 8px 0 2px; cursor: pointer; }
+  .livebox input { width: auto; margin: 0; }
+  .livefields { display: none; }
+  .livefields.on { display: block; }
+
   /* A shipment from a rate confirmation that has not reached our board yet
      renders exactly like any other. Where it sits in OUR system is our
      problem: the carrier does the same thing either way, and the only
@@ -680,8 +689,22 @@
         // outside the driver panel. Inside it they vanished the moment someone
         // chose "Add a new driver", which is exactly when a live-load carrier
         // is most likely to be telling us about equipment for the first time.
-        if (!POOL) {
-          html += '<div class="row2" style="margin-top:2px;">' +
+        // Pool carriers get a choice per load. Live-load carriers always
+        // supply their own, so the fields are simply there.
+        if (POOL) {
+          html += '<label class="livebox">' +
+                  '<input type="checkbox" class="live" data-i="' + i + '"' +
+                  (l.tl ? ' checked' : '') + ' onchange="onLive(this)">' +
+                  'Live load trailer</label>';
+        }
+
+        // The wrapper is always emitted. For a pool carrier it is hidden
+        // until the box is ticked; for a live-load carrier it has no class and
+        // is simply visible.
+        {
+          html += '<div class="' + (POOL ? 'livefields' + (l.tl ? ' on' : '')
+                                         : '') + '" data-live="' + i + '">' +
+                  '<div class="row2" style="margin-top:2px;">' +
                   '<div><label>Trailer</label>' +
                   '<input class="ltl" data-i="' + i + '" value="' + esc(l.tl) + '"></div>' +
                   '<div><label>ETA to shipper</label>' +
@@ -690,7 +713,7 @@
                   '" value="' + esc(etaSplit(l.eta).date || todayValue()) + '">' +
                   '<input class="letat" type="time" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
-                  '</div></div></div>';
+                  '</div></div></div></div>';
         }
       }
       html += '</div></div></div>';
@@ -800,6 +823,21 @@
     field.classList.remove('pulse');
     void field.offsetWidth;          // restart it if it is already running
     field.classList.add('pulse');
+  }
+
+  // Ticking it reveals the trailer and ETA fields for that load. Unticking
+  // clears them, so a box turned off cannot leave a trailer behind that we
+  // would then reserve nothing against.
+  function onLive(box) {
+    var i = box.getAttribute('data-i');
+    var wrap = document.querySelector('.livefields[data-live="' + i + '"]');
+    if (!wrap) return;
+    wrap.className = 'livefields' + (box.checked ? ' on' : '');
+    if (!box.checked) {
+      var tl = document.querySelector('.ltl[data-i="' + i + '"]');
+      if (tl) tl.value = '';
+    }
+    TOUCHED = true;
   }
 
   function onDrv(sel) {
@@ -937,9 +975,16 @@
         }
       }
 
-      if (!POOL) {
+      {
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
+        var liveBox = document.querySelector('.live[data-i="' + i + '"]');
+        var isLive = POOL ? !!(liveBox && liveBox.checked) : false;
+
+        // A pool carrier only reports a trailer when they have said they are
+        // bringing one. Without that check an untouched card would submit the
+        // trailer we assigned them back to us as though they had chosen it.
+        if (POOL && !isLive) return;
         var ed = v('letad', i), et = v('letat', i);
 
         // Both or neither, but only once a trailer is named.
@@ -962,7 +1007,7 @@
         var etaChanged = te !== inputNorm(base.leta) && !(etaUnparsed && !te);
 
         if (t !== inputNorm(base.ltl) || etaChanged) {
-          p.incoming.push({ bol: l.bol, tl: t, eta: te });
+          p.incoming.push({ bol: l.bol, tl: t, eta: te, live: isLive });
         }
       }
     });
