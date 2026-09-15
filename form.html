@@ -89,11 +89,11 @@
   .load.need { border-left-color: #c62828; background: #fdf5f5; }
   .load.lock { border-left-color: #999; background: #f3f3f3; color: #777; }
 
-  /* A shipment we know about from a rate confirmation but which has not
-     reached our board yet. Shown so the carrier can act on it, marked so
-     nobody mistakes it for confirmed. */
-  .load.prov { border-left-color: #6a7fb8; background: #f6f8fc; }
-  .provmsg { font-size: 12px; color: #3d5490; padding: 2px 0 6px; }
+  /* A shipment from a rate confirmation that has not reached our board yet
+     renders exactly like any other. Where it sits in OUR system is our
+     problem: the carrier does the same thing either way, and the only
+     difference they would ever notice is the load gaining a few more details
+     once the import runs. */
 
   /* The shipment a loaded notification was about.
      
@@ -377,6 +377,17 @@
   var LAST_EDGE = false; // which path answered, for the console line
   var LAST_AGE  = 0;
 
+  // Loads the edge knew about but MASTER does not yet.
+  //
+  // They vanished a second after the page rendered: the revalidate goes
+  // straight to Apps Script for the authoritative answer, Apps Script only
+  // knows the real board, and the reply replaced what the edge had merged.
+  //
+  // So they are kept here and re-merged into anything that arrives without
+  // them. The real row wins the moment it exists, because the merge only adds
+  // a BOL the payload does not already carry.
+  var PROV = [];
+
   function isSpot(bol) {
     return !!SPOT && String(bol || '').trim().toUpperCase() === SPOT;
   }
@@ -586,8 +597,7 @@
       // empty driver left a swap looking untouched: the card stayed green with
       // the old name and nothing showed the submission had landed.
       var pend = l.pendingDriver && l.pendingDriver !== l.driver;
-      var cls = l.provisional ? 'load prov'
-              : pend     ? 'load pend'
+      var cls = pend     ? 'load pend'
               : l.gone     ? 'load lock'
               : l.driver   ? 'load ok' : 'load need';
       var d = byName(l.driver) || {};
@@ -613,12 +623,6 @@
         html += '<div class="lnum2">' + tag +
                 (tag && stat ? ' &middot; ' : '') + stat + '</div>';
       }
-      if (l.provisional) {
-        html += '<div class="provmsg">From your rate confirmation. ' +
-                'Not on our board yet, so anything you enter here reaches us ' +
-                'for review rather than updating the load directly.</div>';
-      }
-
       if (pend) {
         html += '<div class="pendmsg">Received: ' + esc(l.pendingDriver) +
                 (l.driver ? ' &middot; replacing ' + esc(l.driver) : '') +
@@ -1028,6 +1032,23 @@
   // needs reloading anyway: re-fetch the payload and re-render in place.
   function applyPayload(p) {
     p = p || {};
+
+    // Remember any provisional loads, and put back ones a later payload
+    // dropped. An Apps Script read has no idea these exist.
+    var incoming = (p.loads || []).filter(function (l) { return l.provisional; });
+    if (incoming.length) PROV = incoming;
+
+    if (PROV.length) {
+      var have = {};
+      (p.loads || []).forEach(function (l) {
+        if (l && l.bol) have[String(l.bol).trim().toUpperCase()] = true;
+      });
+      var missing = PROV.filter(function (l) {
+        return !have[String(l.bol).trim().toUpperCase()];
+      });
+      if (missing.length) p.loads = (p.loads || []).concat(missing);
+    }
+
     LOADS   = p.loads   || [];
     DRIVERS = p.drivers || [];
     ONSITE  = p.onsite  || [];
