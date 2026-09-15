@@ -470,6 +470,21 @@
   // format, and there is nothing to mistype.
   //
   // Stored and submitted in the format the sheet already uses: "0600 09/15".
+  // Today, in the format a date input wants.
+  //
+  // Defaulted because almost every trailer a carrier reports is arriving
+  // today or tonight, and making them pick the date they are already living
+  // in is a step that earns nothing. They can still change it.
+  //
+  // Computed from the LOCAL date rather than an ISO string, which would be
+  // UTC and shows tomorrow's date to anyone reporting after 7pm Central.
+  function todayValue() {
+    var d = new Date();
+    return d.getFullYear() + '-' +
+           ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+           ('0' + d.getDate()).slice(-2);
+  }
+
   function etaJoin(dateVal, timeVal) {
     var d = String(dateVal || '').trim();
     var t = String(timeVal || '').trim();
@@ -505,7 +520,8 @@
 
   function incRow() {
     return '<div class="inc"><input class="tl" placeholder="Trailer #">' +
-           '<input class="ed" type="date" title="ETA date">' +
+           '<input class="ed" type="date" title="ETA date" value="' +
+           todayValue() + '">' +
            '<input class="et2" type="time" title="ETA time"></div>';
   }
   function addIncoming() {
@@ -653,7 +669,7 @@
                   '<div><label>ETA to shipper</label>' +
                   '<div class="row2" style="gap:6px;">' +
                   '<input class="letad" type="date" data-i="' + i +
-                  '" value="' + esc(etaSplit(l.eta).date) + '">' +
+                  '" value="' + esc(etaSplit(l.eta).date || todayValue()) + '">' +
                   '<input class="letat" type="time" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
                   '</div></div></div>';
