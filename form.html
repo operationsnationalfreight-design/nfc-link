@@ -160,7 +160,22 @@
           margin: 6px 0 2px; text-transform: uppercase; letter-spacing: .3px;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row2 { display: flex; gap: 7px; }
-  .row2 > div { flex: 1 1 0; min-width: 0; }
+  /* Any child, not just a div.
+     The ETA pair puts the inputs straight into a row2, so the old
+     div-only rule left them at their intrinsic width. A text input
+     shrinks to nothing and survives that; a native date or time
+     input carries the browser's own picker chrome as a minimum and
+     pushes out of the card instead. */
+  .row2 > * { flex: 1 1 0; min-width: 0; }
+
+  /* Date and time, sized like the incoming-trailer row: the date
+     needs the room, the time does not. Wraps rather than overflows
+     when the column is too narrow for both, which it is on the
+     right half of a split card. */
+  .etarow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .etarow input { min-height: 38px; }
+  .etarow input.letad { flex: 3 1 130px; }
+  .etarow input.letat { flex: 2 1 96px; }
   .dfields { display: none; }
   .dfields.on { display: block; }
   .newbox { margin-top: 8px; padding: 9px; border: 1px dashed #a8b8ad;
@@ -723,17 +738,24 @@
         {
           html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
                                          : '') + '" data-live="' + i + '">' +
-                  '<div class="row2" style="margin-top:2px;">' +
+                  // Trailer on its own line, ETA underneath.
+                  //
+                  // Three controls were sharing one row inside the
+                  // narrow half of a split card. They also arrive at
+                  // different times: a live-load carrier often knows
+                  // the trailer now and the ETA later, or the other way
+                  // round, so pairing them in one cramped row made the
+                  // one being filled in the harder one to hit.
                   '<div><label>Trailer</label>' +
                   '<input class="ltl" data-i="' + i + '" value="' +
                   esc(POOL && !l.live ? '' : l.tl) + '"></div>' +
                   '<div><label>ETA to shipper</label>' +
-                  '<div class="row2" style="gap:6px;">' +
+                  '<div class="etarow">' +
                   '<input class="letad" type="date" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).date || todayValue()) + '">' +
                   '<input class="letat" type="time" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
-                  '</div></div></div></div>';
+                  '</div></div></div>';
         }
       }
       html += '</div></div></div>';
