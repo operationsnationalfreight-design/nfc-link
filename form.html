@@ -351,6 +351,7 @@
   // carrier is, still scopes to one SCAC, still expires on its own. Nothing
   // here can read anything the old form could not.
   var API = window.API;
+  var EDGE = window.EDGE;
 
 
   // The token is the whole session. It is signed, scopes to one carrier and
@@ -1152,7 +1153,29 @@
     if (!document.hidden) revalidate();
   });
 
+  // How fresh the edge copy has to be to be trusted without asking.
+  //
+  // Every push updates it, and pushes happen on promote, on a submission, on a
+  // checkin and whenever a link is minted. So a copy pushed a minute ago is
+  // current unless somebody typed straight into MASTER, which the poll still
+  // catches within the window.
+  var EDGE_TRUST_MS = 90000;
+
   function revalidate() {
+    // ASK THE EDGE FIRST, AND USUALLY STOP THERE.
+    //
+    // This used to go straight to Apps Script on every load and again every
+    // thirty seconds. With several carriers holding the form open, that was a
+    // steady stream of executions against the same book the ADC report and the
+    // webhook are using, and every one of them made the others slower.
+    //
+    // The edge already reports how old its copy is. If it was pushed within
+    // the trust window it IS the current answer, and asking Google to confirm
+    // it costs a container start to be told nothing.
+    if (LAST_EDGE && LAST_AGE < EDGE_TRUST_MS) {
+      return checkEdge();
+    }
+
     var before = JSON.stringify(LOADS) + JSON.stringify(ONSITE) +
                  JSON.stringify(DRIVERS);
 
@@ -1180,6 +1203,37 @@
         console.log('[form] quietly updated from fresh data');
       })
       .catch(function () { /* the cached view is still perfectly usable */ });
+  }
+
+  // A cheap poll: re-read the edge and apply it if it moved.
+  //
+  // Costs nothing on the spreadsheet, so it can run as often as we like. Only
+  // when the edge itself has gone stale does this fall through to Apps Script
+  // and the authoritative read.
+  function checkEdge() {
+    var before = JSON.stringify(LOADS) + JSON.stringify(ONSITE) +
+                 JSON.stringify(DRIVERS);
+
+    fetch(EDGE + '/payload?t=' + encodeURIComponent(TOKEN), { method: 'GET' })
+      .then(function (r) { return r.json(); })
+      .then(function (p) {
+        if (!p || !p.ok) return;
+        LAST_AGE = p.age || 0;
+
+        // The edge has gone stale, so the next poll should ask Apps Script.
+        if (LAST_AGE >= EDGE_TRUST_MS) LAST_EDGE = false;
+
+        var after = JSON.stringify(p.loads || []) +
+                    JSON.stringify(p.onsite || []) +
+                    JSON.stringify(p.drivers || []);
+        if (after === before) return;
+        if (TOUCHED) { offerRefresh(); return; }
+
+        var y = window.scrollY;
+        applyPayload(p);
+        window.scrollTo(0, y);
+      })
+      .catch(function () { /* the view on screen is still usable */ });
   }
 
   // Something changed underneath a carrier who is mid-edit. Tell them, let
