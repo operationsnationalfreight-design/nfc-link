@@ -694,7 +694,7 @@
         if (POOL) {
           html += '<label class="livebox">' +
                   '<input type="checkbox" class="live" data-i="' + i + '"' +
-                  (l.tl ? ' checked' : '') + ' onchange="onLive(this)">' +
+                  (l.live ? ' checked' : '') + ' onchange="onLive(this)">' +
                   'Live load trailer</label>';
         }
 
@@ -702,11 +702,12 @@
         // until the box is ticked; for a live-load carrier it has no class and
         // is simply visible.
         {
-          html += '<div class="' + (POOL ? 'livefields' + (l.tl ? ' on' : '')
+          html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
                                          : '') + '" data-live="' + i + '">' +
                   '<div class="row2" style="margin-top:2px;">' +
                   '<div><label>Trailer</label>' +
-                  '<input class="ltl" data-i="' + i + '" value="' + esc(l.tl) + '"></div>' +
+                  '<input class="ltl" data-i="' + i + '" value="' +
+                  esc(POOL && !l.live ? '' : l.tl) + '"></div>' +
                   '<div><label>ETA to shipper</label>' +
                   '<div class="row2" style="gap:6px;">' +
                   '<input class="letad" type="date" data-i="' + i +
