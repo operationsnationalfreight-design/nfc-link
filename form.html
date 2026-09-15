@@ -714,12 +714,14 @@
       html += '<div class="split"><div class="left"><div class="stops">' +
               stopHtml(l.stops) + '</div></div><div class="right">';
 
-      if (l.gone) {
-        // Editable, but say what happens: a change here does not silently
-        // rewrite a load that is already moving, it comes to us first.
-        html += '<div class="note">Departed from ADC. A change here comes to ' +
-                'us for review rather than updating the load directly.</div>';
-      }
+      // A departed load carries no note.
+      //
+      // It used to explain that an edit here goes to us for review rather
+      // than straight onto the load. True, and none of the carrier's
+      // business: it describes our internal handling of a submission, and
+      // reading it while looking at an editable field invites the question of
+      // whether the edit worked. The review step still happens, it just is
+      // not narrated.
       {
         html += '<label>Driver</label>' +
                 '<select class="drv" data-i="' + i + '" onchange="onDrv(this)">' +
