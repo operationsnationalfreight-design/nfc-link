@@ -488,9 +488,10 @@
   function renderOnsite() {
     var h = document.getElementById('onsite');
     if (!ONSITE.length) {
-      var where = sitePhrase();
-      h.innerHTML = '<p class="note">No equipment tracked' +
-                    (where ? ' at ' + esc(where) : '') + '. ' +
+      // The caption above already names the yard, so this does not. Two
+      // sentences one line apart both ending in GEA Perryville read as a
+      // template rather than as something written for them.
+      h.innerHTML = '<p class="note">Nothing tracked right now.<br>' +
                     'Add incoming equipment below.</p>';
       return;
     }
