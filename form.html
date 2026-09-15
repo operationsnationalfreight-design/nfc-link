@@ -940,15 +940,20 @@
       if (!POOL) {
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
-        // Both or neither. Half an ETA is the commonest way this goes wrong:
-        // a carrier picks the date, gets distracted, and we end up with
-        // "09/15" on a load where the yard needs a time to plan around.
         var ed = v('letad', i), et = v('letat', i);
-        if ((ed && !et) || (!ed && et)) {
+
+        // Both or neither, but only once a trailer is named.
+        //
+        // The date defaults to today, so a card nobody has touched carries a
+        // date and nothing else. Demanding a time for that blocked submitting
+        // a driver on any load where no trailer was being reported, which is
+        // most of them.
+        if (t && ((ed && !et) || (!ed && et))) {
           problem = 'Trailer ETA on ' + l.nfc + ' needs both a date and a time.';
           return;
         }
-        var te = etaJoin(ed, et);
+        // No trailer means no ETA to report, whatever the pickers say.
+        var te = t ? etaJoin(ed, et) : '';
         // If what was on the sheet could not be parsed into the pickers,
         // an empty pair means "we could not show it", not "clear it". Treating
         // that as a change would wipe a note somebody deliberately left.
@@ -964,15 +969,25 @@
 
     if (POOL) document.querySelectorAll('#incoming .inc').forEach(function(r) {
       var tl = r.querySelector('.tl').value.trim();
+
+      // NO TRAILER, NO ROW.
+      //
+      // The date now defaults to today, so an untouched row carries a date and
+      // nothing else. Checking the ETA before checking whether a trailer was
+      // entered made every blank row look half-filled, and the form refused to
+      // submit over spare rows nobody had touched.
+      //
+      // A row is only a row once it names a trailer.
+      if (!tl) return;
+
       var pd = r.querySelector('.ed').value;
       var pt = r.querySelector('.et2').value;
       if ((pd && !pt) || (!pd && pt)) {
-        problem = 'Incoming trailer ' + (tl || '') +
+        problem = 'Incoming trailer ' + tl +
                   ' needs both a date and a time for its ETA.';
         return;
       }
-      var eta = etaJoin(pd, pt);
-      if (tl) p.incoming.push({ tl: tl, eta: eta });
+      p.incoming.push({ tl: tl, eta: etaJoin(pd, pt) });
     });
 
     if (problem) {
