@@ -316,7 +316,7 @@
     <div class="col">
       <div class="card">
         <h2>Trailers On Site</h2>
-        <p class="note">Your equipment currently at our yard.</p>
+        <p class="note" id="onsitenote">Your equipment currently tracked.</p>
         <div id="onsite">
           <div class="skel w90"></div><div class="skel w70"></div>
           <div class="skel w90"></div>
@@ -325,7 +325,7 @@
 
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
-        <p class="note">Equipment heading to a GEA yard, with expected arrival.</p>
+        <p class="note" id="incnote">Equipment heading in, with expected arrival.</p>
         <div id="incoming"></div>
         <button class="addbtn" onclick="addIncoming()">+ Add another</button>
       </div>
@@ -440,10 +440,57 @@
     return null;
   }
 
+  // The yards this carrier actually picks from, named.
+  //
+  // "our yard" told them nothing. A carrier running Perryville and Morris has
+  // two yards and no way to tell which panel is about which, and one running a
+  // single site should simply see its name. Derived from their own loads
+  // rather than configured, so it cannot drift from what they are looking at.
+  function siteNames() {
+    var seen = {}, out = [];
+    LOADS.forEach(function (l) {
+      (l.stops || []).forEach(function (x) {
+        if (!/pickup/i.test(String(x.type || ''))) return;
+        var raw = String(x.city || '').toUpperCase();
+        var name = /PERRYVILLE|\bBAL\b/.test(raw)  ? 'GEA Perryville'
+                 : /MORRIS|\bCHI\b|\bMOR\b/.test(raw) ? 'GEA Morris'
+                 : /LOUISVILLE|\bLOU\b/.test(raw)  ? 'GEA Louisville'
+                 : String(x.city || '').trim();
+        if (name && !seen[name]) { seen[name] = 1; out.push(name); }
+      });
+    });
+    return out;
+  }
+
+  function sitePhrase() {
+    var n = siteNames();
+    if (!n.length) return '';
+    if (n.length === 1) return n[0];
+    if (n.length === 2) return n[0] + ' and ' + n[1];
+    return n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1];
+  }
+
+  function renderSiteNotes() {
+    var where = sitePhrase();
+    var on = document.getElementById('onsitenote');
+    var inc = document.getElementById('incnote');
+    if (on) {
+      on.textContent = where ? 'Your equipment currently at ' + where + '.'
+                             : 'Your equipment currently tracked.';
+    }
+    if (inc) {
+      inc.textContent = where
+        ? 'Equipment heading to ' + where + ', with expected arrival.'
+        : 'Equipment heading in, with expected arrival.';
+    }
+  }
+
   function renderOnsite() {
     var h = document.getElementById('onsite');
     if (!ONSITE.length) {
-      h.innerHTML = '<p class="note">No GEA yard equipment tracked. ' +
+      var where = sitePhrase();
+      h.innerHTML = '<p class="note">No equipment tracked' +
+                    (where ? ' at ' + esc(where) : '') + '. ' +
                     'Add incoming equipment below.</p>';
       return;
     }
@@ -1165,6 +1212,8 @@
     var old = document.getElementById('pendtl');
     if (old) old.parentNode.removeChild(old);
 
+    // Before the panels, since both their captions name the yards.
+    renderSiteNotes();
     renderOnsite();
     renderPendingTrailers();
     renderLoads();
