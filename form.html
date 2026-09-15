@@ -625,7 +625,17 @@
           stat = '<span style="color:#2e7d32">&#10004; Loaded &middot; ' +
                  esc(l.tl) + '</span>';
         } else {
-          stat = 'Trailer ' + esc(l.tl);
+          // ASSIGNED, not loaded.
+          //
+          // "Trailer 5306" stated a fact and answered nothing: a carrier
+          // reading it cannot tell whether that trailer is spoken for, sitting
+          // empty, or something they are expected to act on. Saying assigned
+          // puts it in the same vocabulary as the other two states.
+          //
+          // Neutral on purpose. Green with a tick reads as done, and an
+          // assigned trailer still has to be loaded before anything is.
+          stat = '<span style="color:#555">Assigned &middot; ' +
+                 esc(l.tl) + '</span>';
         }
       }
       if (tag || stat) {
