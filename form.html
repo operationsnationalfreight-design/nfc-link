@@ -701,7 +701,16 @@
         // is most likely to be telling us about equipment for the first time.
         // Pool carriers get a choice per load. Live-load carriers always
         // supply their own, so the fields are simply there.
-        if (POOL) {
+        // Only where the choice is still open.
+        //
+        // A trailer that is assigned, loaded or already rolling has had that
+        // decision made, and offering the box invites a carrier to change
+        // something they cannot change: the yard has committed equipment, and
+        // a load on the road is past arguing with.
+        //
+        // Shown when they have already said live, so unticking is possible
+        // right up until we act on it.
+        if (POOL && (l.live || (!l.tl && !l.loaded && !l.gone))) {
           html += '<label class="livebox">' +
                   '<input type="checkbox" class="live" data-i="' + i + '"' +
                   (l.live ? ' checked' : '') + ' onchange="onLive(this)">' +
