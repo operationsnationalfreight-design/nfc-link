@@ -687,6 +687,19 @@
               '<span class="sep">|</span>' + esc(l.bol) + '</div>';
 
       var tag = l.resched ? '<span class="resched">RESCHEDULED</span>' : '';
+      // Is this load's trailer already in the yard?
+      //
+      // Two ways to know, and the text is the weaker one. AT ADC gets written
+      // when we notice the arrival; until then the cell still holds the old
+      // ETA. The onsite list comes from Kaleris and is the arrival itself.
+      // Computed once here because the status line and the input fields both
+      // depend on it, and they must never disagree.
+      var here = String(l.tl || '').trim().toUpperCase();
+      var atYard = /^AT ADC$/i.test(String(l.eta || '').trim()) ||
+                   (!!here && (ONSITE || []).some(function (o) {
+                     return String(o.tl || '').trim().toUpperCase() === here;
+                   }));
+
       var stat = '';
       if (l.tl) {
         if (l.gone) {
@@ -712,10 +725,16 @@
           // a trailer sitting in the yard and one still hours away read
           // identically here. The carrier typed that ETA once and has not
           // seen it since, which is a poor position to be chased from.
+          // On site wins over whatever the ETA cell says. A trailer that has
+          // arrived was reading "Assigned - 154894 - ETA 1304 09/16", which is
+          // a promise about something that already happened.
+          //
+          // "on site" rather than "at yard", matching the panel heading these
+          // carriers are already reading two inches to the left.
           var where = String(l.eta || '').trim();
-          var loc = !where ? ''
-                  : /^AT ADC$/i.test(where)
-                      ? ' <span style="color:#2e7d32">&middot; at yard</span>'
+          var loc = atYard
+                  ? ' <span style="color:#2e7d32">&middot; on site</span>'
+                  : !where ? ''
                       : ' <span style="color:#8a6d1f;font-weight:700">' +
                         '&middot; ETA ' + esc(where) + '</span>';
           stat = '<span style="color:#555">Assigned &middot; ' +
@@ -813,18 +832,6 @@
         // then is asking when something will get somewhere it already is, and
         // a date field prefilled with today invites an answer that overwrites
         // a known arrival with a guess.
-        // Two ways to know it is here, and the text is the weaker one.
-        //
-        // AT ADC gets written when we notice the arrival. Until then the cell
-        // still holds the old ETA, so checking only the text meant a trailer
-        // standing in the yard kept asking when it would get there. The onsite
-        // list comes from Kaleris and is the fact; the text is our record of
-        // the fact, and it can lag.
-        var here = String(l.tl || '').trim().toUpperCase();
-        var atYard = /^AT ADC$/i.test(String(l.eta || '').trim()) ||
-                     (!!here && (ONSITE || []).some(function (o) {
-                       return String(o.tl || '').trim().toUpperCase() === here;
-                     }));
         if (!atYard) {
           html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
                                          : '') + '" data-live="' + i + '">' +
@@ -846,12 +853,10 @@
                   '<input class="letat" type="time" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
                   '</div></div></div>';
-        } else {
-          // Said plainly, so the missing fields read as an answer rather than
-          // as something that failed to load.
-          html += '<div class="note" style="color:#2e7d32;">' +
-                  esc(l.tl) + ' is at our yard. Nothing needed here.</div>';
         }
+        // Nothing in place of the fields. The status line above already says
+        // "on site", so a second sentence saying the same thing is noise on a
+        // card that is otherwise finished.
       }
       html += '</div></div></div>';
     });
