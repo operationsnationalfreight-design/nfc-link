@@ -95,10 +95,14 @@
   .livebox { display: flex; align-items: center; gap: 6px; font-size: 13px;
              color: #444; margin: 8px 0 2px; cursor: pointer; }
   .livebox input { width: auto; margin: 0; }
-  .clearbtn { font: inherit; font-size: 12.5px; padding: 6px 12px;
-              border: 1px solid #9aa39e; border-radius: 3px; background: #fff;
-              color: #444; cursor: pointer; }
-  .clearbtn:hover { border-color: #0d3320; color: #0d3320; }
+  /* Centred and red, because it undoes work.
+     Muted rather than alarming: this is a correction a carrier is entitled to
+     make, not a warning, and a card is not the place for a stop sign. */
+  .clearwrap { margin-top: 10px; text-align: center; }
+  .clearbtn { font: inherit; font-size: 12.5px; padding: 7px 16px;
+              border: 1px solid #e3b4b4; border-radius: 3px;
+              background: #fdeceb; color: #9a2b2b; cursor: pointer; }
+  .clearbtn:hover { background: #f8dcda; border-color: #d08f8f; }
   .livefields { display: none; }
   .livefields.on { display: block; }
 
@@ -869,8 +873,17 @@
         // on screen at all. This empties both and brings the fields back, so
         // the correction is one click and then typing, rather than a phone
         // call to us.
-        if (!l.loaded && !l.gone) {
-          html += '<div style="margin-top:8px;">' +
+        // Only when there is something to clear.
+        //
+        // On an empty card it offered to undo nothing, which is a control that
+        // does not work: pressing it changes no field and submits no row. It
+        // also put a destructive-looking button on the one card where the
+        // carrier has done no work yet.
+        var hasSomething = !!(String(l.pendingDriver || l.driver || '').trim() ||
+                              String(l.tl || '').trim());
+
+        if (!l.loaded && !l.gone && hasSomething) {
+          html += '<div class="clearwrap">' +
                   '<button type="button" class="clearbtn" data-i="' + i + '" ' +
                   'onclick="clearShipment(' + i + ')">Clear driver and trailer' +
                   '</button></div>';
