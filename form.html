@@ -705,8 +705,21 @@
           //
           // Neutral on purpose. Green with a tick reads as done, and an
           // assigned trailer still has to be loaded before anything is.
+          //
+          // AND WHERE IT IS.
+          //
+          // Column K has always been in this payload and was never shown, so
+          // a trailer sitting in the yard and one still hours away read
+          // identically here. The carrier typed that ETA once and has not
+          // seen it since, which is a poor position to be chased from.
+          var where = String(l.eta || '').trim();
+          var loc = !where ? ''
+                  : /^AT ADC$/i.test(where)
+                      ? ' <span style="color:#2e7d32">&middot; at yard</span>'
+                      : ' <span style="color:#8a6d1f;font-weight:700">' +
+                        '&middot; ETA ' + esc(where) + '</span>';
           stat = '<span style="color:#555">Assigned &middot; ' +
-                 esc(l.tl) + '</span>';
+                 esc(l.tl) + '</span>' + loc;
         }
       }
       if (tag || stat) {
