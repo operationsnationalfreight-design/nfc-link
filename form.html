@@ -731,15 +731,32 @@
 
       // A removal we have not applied yet. Treated as empty everywhere below,
       // so the card cannot show a driver the carrier has already taken off.
+      // Two removals, tracked apart.
+      //
+      // One flag covering both said "Driver and trailer removed" to a carrier
+      // who had only taken the driver off, while the trailer sat there in
+      // front of them. Each one now blanks only its own fields and says only
+      // its own half.
       var pendingClear = !!l.pendingClear;
-      if (pendingClear) { l = Object.assign({}, l, {
-        driver: '', pendingDriver: '', mobile: '', dl: '', tk: '', tl: ''
-      }); }
+      var pendingTl = !!l.pendingTrailerClear;
+
+      if (pendingClear || pendingTl) {
+        var patch = {};
+        if (pendingClear) {
+          patch.driver = ''; patch.pendingDriver = '';
+          patch.mobile = ''; patch.dl = ''; patch.tk = '';
+        }
+        if (pendingTl) { patch.tl = ''; patch.eta = ''; }
+        l = Object.assign({}, l, patch);
+      }
 
       var stat = '';
-      if (pendingClear) {
+      if (pendingClear || pendingTl) {
+        var what = (pendingClear && pendingTl) ? 'Driver and trailer removed'
+                 : pendingClear ? 'Driver removed'
+                                : 'Trailer removed';
         stat = '<span style="color:#8a6d1f;font-weight:700">' +
-               'Driver and trailer removed &middot; waiting on us</span>';
+               what + ' &middot; waiting on us</span>';
       }
       if (l.tl) {
         if (l.gone) {
@@ -932,7 +949,7 @@
         // through the dropdown now, so this does one thing.
         var hasTrailer = !!String(l.tl || '').trim();
 
-        if (!l.loaded && !l.gone && hasTrailer && !l.pendingTrailerClear) {
+        if (!l.loaded && !l.gone && hasTrailer && !pendingTl) {
           html += '<div class="clearwrap">' +
                   '<button type="button" class="clearbtn" data-i="' + i + '" ' +
                   'onclick="removeTrailer(' + i + ')">Remove trailer' +
