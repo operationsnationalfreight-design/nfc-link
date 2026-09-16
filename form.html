@@ -806,7 +806,15 @@
         // The wrapper is always emitted. For a pool carrier it is hidden
         // until the box is ticked; for a live-load carrier it has no class and
         // is simply visible.
-        {
+        //
+        // EXCEPT when the trailer is already in the yard.
+        //
+        // AT ADC means it arrived and we know it arrived. Asking for an ETA
+        // then is asking when something will get somewhere it already is, and
+        // a date field prefilled with today invites an answer that overwrites
+        // a known arrival with a guess.
+        var atYard = /^AT ADC$/i.test(String(l.eta || '').trim());
+        if (!atYard) {
           html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
                                          : '') + '" data-live="' + i + '">' +
                   // Trailer on its own line, ETA underneath.
@@ -827,6 +835,11 @@
                   '<input class="letat" type="time" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
                   '</div></div></div>';
+        } else {
+          // Said plainly, so the missing fields read as an answer rather than
+          // as something that failed to load.
+          html += '<div class="note" style="color:#2e7d32;">' +
+                  esc(l.tl) + ' is at our yard. Nothing needed here.</div>';
         }
       }
       html += '</div></div></div>';
