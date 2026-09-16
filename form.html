@@ -1073,8 +1073,10 @@
       var el = document.querySelector(sel + '[data-i="' + i + '"]');
       if (el) el.value = '';
     });
+    // Every field, including the date. Leaving today in it is what made the
+    // card look half filled to the validator.
     var d = document.querySelector('.letad[data-i="' + i + '"]');
-    if (d) d.value = todayValue();
+    if (d) d.value = '';
 
     var btn = document.querySelector('.clearbtn[data-i="' + i + '"]');
     if (btn) {
@@ -1345,6 +1347,25 @@
       }
 
       {
+        // A load queued for trailer removal has nothing to report.
+        //
+        // Removing blanks the trailer and the time and resets the date to
+        // today, so the both-or-neither rule below saw a date with no time and
+        // refused to submit the very card being emptied. The removal is its
+        // own record; there is no trailer here to validate.
+        if (DROPTL[l.bol] !== undefined) return;
+
+        // Hidden fields report nothing.
+        //
+        // When the trailer is already in the yard the block is hidden, but the
+        // inputs are still in the page holding the trailer number and the
+        // date prefill. The collector read them anyway, saw a trailer with a
+        // date and no time, and refused to submit over a control the carrier
+        // cannot see. Nothing on screen explained it and nothing they could do
+        // would clear it.
+        var wrap = document.querySelector('[data-live="' + i + '"]');
+        if (wrap && wrap.style.display === 'none') return;
+
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
         var liveBox = document.querySelector('.live[data-i="' + i + '"]');
