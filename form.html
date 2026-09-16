@@ -813,7 +813,18 @@
         // then is asking when something will get somewhere it already is, and
         // a date field prefilled with today invites an answer that overwrites
         // a known arrival with a guess.
-        var atYard = /^AT ADC$/i.test(String(l.eta || '').trim());
+        // Two ways to know it is here, and the text is the weaker one.
+        //
+        // AT ADC gets written when we notice the arrival. Until then the cell
+        // still holds the old ETA, so checking only the text meant a trailer
+        // standing in the yard kept asking when it would get there. The onsite
+        // list comes from Kaleris and is the fact; the text is our record of
+        // the fact, and it can lag.
+        var here = String(l.tl || '').trim().toUpperCase();
+        var atYard = /^AT ADC$/i.test(String(l.eta || '').trim()) ||
+                     (!!here && (ONSITE || []).some(function (o) {
+                       return String(o.tl || '').trim().toUpperCase() === here;
+                     }));
         if (!atYard) {
           html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
                                          : '') + '" data-live="' + i + '">' +
