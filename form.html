@@ -708,7 +708,18 @@
                      return String(o.tl || '').trim().toUpperCase() === here;
                    }));
 
+      // A removal we have not applied yet. Treated as empty everywhere below,
+      // so the card cannot show a driver the carrier has already taken off.
+      var pendingClear = !!l.pendingClear;
+      if (pendingClear) { l = Object.assign({}, l, {
+        driver: '', pendingDriver: '', mobile: '', dl: '', tk: '', tl: ''
+      }); }
+
       var stat = '';
+      if (pendingClear) {
+        stat = '<span style="color:#8a6d1f;font-weight:700">' +
+               'Driver and trailer removed &middot; waiting on us</span>';
+      }
       if (l.tl) {
         if (l.gone) {
           stat = '<span style="color:#1565c0">&#9654; En route &middot; ' +
@@ -873,7 +884,8 @@
         // on screen at all. This empties both and brings the fields back, so
         // the correction is one click and then typing, rather than a phone
         // call to us.
-        // Only when there is something to clear.
+        // Nothing to clear when a clear is already waiting on us.
+        //
         //
         // On an empty card it offered to undo nothing, which is a control that
         // does not work: pressing it changes no field and submits no row. It
@@ -882,7 +894,7 @@
         var hasSomething = !!(String(l.pendingDriver || l.driver || '').trim() ||
                               String(l.tl || '').trim());
 
-        if (!l.loaded && !l.gone && hasSomething) {
+        if (!l.loaded && !l.gone && hasSomething && !pendingClear) {
           html += '<div class="clearwrap">' +
                   '<button type="button" class="clearbtn" data-i="' + i + '" ' +
                   'onclick="clearShipment(' + i + ')">Clear driver and trailer' +
