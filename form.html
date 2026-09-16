@@ -98,6 +98,19 @@
   /* Centred and red, because it undoes work.
      Muted rather than alarming: this is a correction a carrier is entitled to
      make, not a warning, and a card is not the place for a stop sign. */
+  /* The rename affordance sits on the label, not next to the value, so it
+     never looks like part of the driver list itself. */
+  .locked { background: #f5f6f5; color: #555; cursor: default; }
+  .editnote { font-size: 11.5px; color: #8a6d1f; margin: 4px 0 2px; }
+  .rename { float: right; font-weight: normal; font-size: 11.5px;
+            color: #0d3320; cursor: pointer; text-decoration: underline; }
+  .rename:hover { color: #1565c0; }
+  .renamebox { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .renamebox input { flex: 1 1 140px; min-width: 0; }
+  .renamebox button { font: inherit; font-size: 12.5px; padding: 6px 12px;
+                      border-radius: 3px; cursor: pointer; }
+  .rnok { border: 1px solid #0d3320; background: #0d3320; color: #fff; }
+  .rncx { border: 1px solid #bfc5c2; background: #fff; color: #444; }
   .clearwrap { margin-top: 10px; text-align: center; }
   .clearbtn { font: inherit; font-size: 12.5px; padding: 7px 16px;
               border: 1px solid #e3b4b4; border-radius: 3px;
@@ -634,9 +647,17 @@
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
   }
 
-  function driverOptions(sel) {
-    var h = '<option value="">-- select driver --</option>' +
-            '<option value="__NEW__">+ Add a new driver</option>';
+  function driverOptions(sel, assigned) {
+    // The top entry IS the removal.
+    //
+    // A separate "remove driver" line would be a second control meaning the
+    // same thing as choosing nobody, and two ways to say nobody invites the
+    // question of how they differ. It just says what it does at that moment.
+    var h = '<option value="">' +
+            (assigned ? '-- remove driver --' : '-- select driver --') +
+            '</option>' +
+            '<option value="__NEW__">+ Add a new driver</option>' +
+            (assigned ? '<option value="__EDIT__">* Edit driver record</option>' : '');
     DRIVERS.forEach(function(d) {
       h += '<option value="' + esc(d.name) + '"' +
            (d.name === sel ? ' selected' : '') + '>' + esc(d.name) + '</option>';
@@ -782,9 +803,19 @@
       // whether the edit worked. The review step still happens, it just is
       // not narrated.
       {
+        // Rename, in place.
+        //
+        // The name is the key everywhere: the roster, MASTER column N, and
+        // FourKites. So a misspelling could only be fixed by adding a second
+        // driver, which left the first one on the list forever and split one
+        // person's history across two names. The pencil edits the driver who
+        // is selected rather than creating anybody.
         html += '<label>Driver</label>' +
                 '<select class="drv" data-i="' + i + '" onchange="onDrv(this)">' +
-                driverOptions(l.pendingDriver || l.driver) + '</select>';
+                driverOptions(l.pendingDriver || l.driver,
+                              !!(l.pendingDriver || l.driver)) + '</select>' +
+                '<div class="editnote" id="ednote' + i + '" style="display:none;">' +
+                'Updates this driver everywhere, not just this load.</div>';
 
         // Remember exactly what this card is rendered with. On submit we compare
         // against THIS, not against CARRIER, so a prefill that differs from the
@@ -800,6 +831,9 @@
 
         html += '<div class="dfields' + ((l.driver || l.pendingDriver) ? ' on' : '') +
                 '" id="df' + i + '">' +
+                '<div id="ednm' + i + '" style="display:none;">' +
+                '<label>Driver name</label>' +
+                '<input class="ednin" data-i="' + i + '"></div>' +
                 '<div class="row2"><div><label>Mobile</label>' +
                 '<input class="em" data-i="' + i + '" value="' +
                 esc(l.mobile || d.mobile || '') + '"></div>' +
@@ -891,19 +925,29 @@
         // does not work: pressing it changes no field and submits no row. It
         // also put a destructive-looking button on the one card where the
         // carrier has done no work yet.
-        var hasSomething = !!(String(l.pendingDriver || l.driver || '').trim() ||
-                              String(l.tl || '').trim());
+        // Trailer only, and only when there is one.
+        //
+        // It used to clear the driver as well, which made swapping a trailer
+        // cost the carrier their driver assignment too. The driver is removed
+        // through the dropdown now, so this does one thing.
+        var hasTrailer = !!String(l.tl || '').trim();
 
-        if (!l.loaded && !l.gone && hasSomething && !pendingClear) {
+        if (!l.loaded && !l.gone && hasTrailer && !l.pendingTrailerClear) {
           html += '<div class="clearwrap">' +
                   '<button type="button" class="clearbtn" data-i="' + i + '" ' +
-                  'onclick="clearShipment(' + i + ')">Clear driver and trailer' +
+                  'onclick="removeTrailer(' + i + ')">Remove trailer' +
                   '</button></div>';
         }
       }
       html += '</div></div></div>';
     });
     host.innerHTML = html;
+
+    // Locked by default wherever a driver is showing. Editing is a choice made
+    // in the dropdown, not the resting state of the card.
+    LOADS.forEach(function (l2, k) {
+      if (l2.driver || l2.pendingDriver) fieldsLocked(k, true);
+    });
 
     if (SPOT && !SPOTTED) scrollToSpot();
   }
@@ -1015,6 +1059,30 @@
   // would then reserve nothing against.
   // Empties the card and reveals the fields. Nothing is sent until Submit, so
   // this is a local reset rather than an instruction to us.
+  // Trailers queued for removal, by BOL. Local until Submit.
+  var DROPTL = {};
+
+  function removeTrailer(i) {
+    var l = LOADS[i];
+    if (!l) return;
+    DROPTL[l.bol] = String(l.tl || '').trim();
+
+    var wrap = document.querySelector('[data-live="' + i + '"]');
+    if (wrap) wrap.style.display = '';
+    ['.ltl', '.letat'].forEach(function (sel) {
+      var el = document.querySelector(sel + '[data-i="' + i + '"]');
+      if (el) el.value = '';
+    });
+    var d = document.querySelector('.letad[data-i="' + i + '"]');
+    if (d) d.value = todayValue();
+
+    var btn = document.querySelector('.clearbtn[data-i="' + i + '"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Trailer removed on submit';
+    }
+  }
+
   function clearShipment(i) {
     var card = document.querySelector('[data-live="' + i + '"]');
     if (card) card.style.display = '';
@@ -1043,8 +1111,83 @@
     TOUCHED = true;
   }
 
+  // Pending renames, keyed old name -> new name. Applied to the list on the
+  // spot so every card showing that driver updates together, which is what
+  // makes it read as a correction rather than an edit to one load.
+  var RENAMES = {};
+
+  // Edit mode, per card.
+  //
+  // The driver fields are read-only until somebody chooses Edit driver record.
+  // They were always editable before, which meant a carrier could change a CDL
+  // number while intending to assign somebody, and nothing said that the
+  // change reached every load that driver is on.
+  var EDITING = {};
+
+  function fieldsLocked(i, locked) {
+    ['.em', '.ed', '.et'].forEach(function (sel) {
+      var el = document.querySelector(sel + '[data-i="' + i + '"]');
+      if (el) { el.readOnly = locked; el.classList.toggle('locked', locked); }
+    });
+    var nm = document.getElementById('ednm' + i);
+    if (nm) nm.style.display = locked ? 'none' : 'block';
+    var note = document.getElementById('ednote' + i);
+    if (note) note.style.display = locked ? 'none' : 'block';
+  }
+
+  function startEdit(i, who) {
+    EDITING[i] = who;
+    var sel = document.querySelector('.drv[data-i="' + i + '"]');
+    sel.innerHTML = driverOptions(who, true);
+    sel.value = who;
+
+    var df = document.getElementById('df' + i);
+    if (df) df.className = 'dfields on';
+
+    var nm = document.getElementById('ednm' + i);
+    if (nm) {
+      var input = nm.querySelector('.ednin');
+      input.value = who;
+    }
+    fieldsLocked(i, false);
+  }
+
+  // Everything the carrier changed about this driver, or null.
+  function editFrom(i) {
+    var who = EDITING[i];
+    if (!who) return null;
+
+    var nm = document.getElementById('ednm' + i);
+    var name = nm ? String(nm.querySelector('.ednin').value || '').trim() : who;
+    if (!name) name = who;
+
+    var mob = v('em', i), dl = v('ed', i), tk = v('et', i);
+    var init = INIT[i] || {};
+
+    var changed = name !== who ||
+                  mob !== init.mobile || dl !== init.dl || tk !== init.tk;
+    if (!changed) return null;
+
+    // A name already on the roster is a different person, not a spelling.
+    var clash = name !== who && DRIVERS.some(function (d) {
+      return d.name.toLowerCase() === name.toLowerCase();
+    });
+    if (clash) return { clash: name };
+
+    return { was: who, name: name, mobile: mob, dl: dl, tk: tk };
+  }
+
   function onDrv(sel) {
     var i = sel.getAttribute('data-i');
+
+    if (sel.value === '__EDIT__') {
+      startEdit(i, (INIT[i] || {}).driver || '');
+      return;
+    }
+
+    // Leaving the driver, or picking somebody else, ends the edit.
+    if (EDITING[i]) { EDITING[i] = null; fieldsLocked(i, true); }
+
     var isNew = (sel.value === '__NEW__');
     var nb = document.getElementById('nb' + i);
     var df = document.getElementById('df' + i);
@@ -1084,7 +1227,11 @@
 
   function submitForm() {
     var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [],
-              clears: [] };
+              removeDrivers: [], removeTrailers: [] };
+
+    Object.keys(DROPTL).forEach(function (bol) {
+      p.removeTrailers.push({ bol: bol, tl: DROPTL[bol] });
+    });
     var problem = '', seenEdit = {};
 
     // A driver can run several loads. They cannot be in two places on the
@@ -1145,6 +1292,15 @@
 
         p.newDrivers.push({ name: n, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
         p.assignments.push({ bol: l.bol, driver: n });
+      } else if (EDITING[i]) {
+        var ed = editFrom(i);
+        if (ed && ed.clash) {
+          problem = ed.clash + ' is already on your driver list. Pick them ' +
+                    'from the dropdown instead of renaming this one.';
+          return;
+        }
+        if (ed) p.driverEdits.push(ed);
+
       } else if (!val && (INIT[i] || {}).driver) {
         // Cleared. The driver was on the card when it rendered and is not now.
         //
@@ -1152,9 +1308,7 @@
         // driver, so pressing Clear and submitting returned "Nothing
         // submitted" and the carrier had every reason to think it had worked.
         // An emptied field is a statement, and it needs to travel as one.
-        p.clears.push({ bol: l.bol,
-                        driver: INIT[i].driver,
-                        tl: (INIT[i] || {}).ltl || '' });
+        p.removeDrivers.push({ bol: l.bol, driver: INIT[i].driver });
 
       } else if (val) {
         var init = INIT[i] || { driver: '', mobile: '', dl: '', tk: '' };
@@ -1255,7 +1409,8 @@
       return;
     }
     if (!p.newDrivers.length && !p.driverEdits.length &&
-        !p.assignments.length && !p.incoming.length && !p.clears.length) {
+        !p.assignments.length && !p.incoming.length &&
+        !p.removeDrivers.length && !p.removeTrailers.length) {
       document.getElementById('status').innerHTML = '<span class="err">Nothing to send yet.</span>';
       return;
     }
