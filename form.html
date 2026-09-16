@@ -949,12 +949,20 @@
         // through the dropdown now, so this does one thing.
         var hasTrailer = !!String(l.tl || '').trim();
 
-        if (!l.loaded && !l.gone && hasTrailer && !pendingTl) {
-          html += '<div class="clearwrap">' +
-                  '<button type="button" class="clearbtn" data-i="' + i + '" ' +
-                  'onclick="removeTrailer(' + i + ')">Remove trailer' +
-                  '</button></div>';
-        }
+        // PULLED, pending a rethink.
+        //
+        // The mechanism stays: removeTrailer, DROPTL, the REMOVE TRAILER type
+        // and its promote pass are all still here and still work, so bringing
+        // it back is uncommenting this block. What was unresolved is when a
+        // carrier should be able to take equipment off a load we have already
+        // planned around, not whether the plumbing works.
+        //
+        // if (!l.loaded && !l.gone && hasTrailer && !pendingTl) {
+        //   html += '<div class="clearwrap">' +
+        //           '<button type="button" class="clearbtn" data-i="' + i + '" ' +
+        //           'onclick="removeTrailer(' + i + ')">Remove trailer' +
+        //           '</button></div>';
+        // }
       }
       html += '</div></div></div>';
     });
@@ -1472,13 +1480,28 @@
     // would make this a non-simple request, the browser would send an OPTIONS
     // preflight first, and Apps Script cannot answer OPTIONS at all. The body
     // is still JSON; only the declared type differs.
+    // Bounded.
+    //
+    // Without a timeout a slow Apps Script answer left the promise unsettled
+    // forever: "Sending..." stayed on screen, the retry never fired because
+    // nothing had failed, and the carrier had no way to tell whether their
+    // work had landed. An execution that queues behind other traffic can take
+    // a long time to start, which is exactly when this happens.
+    //
+    // 30 seconds, then treat it as a retryable failure like any other.
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () {
+      if (ctrl) ctrl.abort();
+    }, 30000);
+
     fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ api: 'submit', t: TOKEN, data: payload }),
-      redirect: 'follow'
+      redirect: 'follow',
+      signal: ctrl ? ctrl.signal : undefined
     })
-      .then(function (r) { return r.json(); })
+      .then(function (r) { clearTimeout(timer); return r.json(); })
       .then(function (res) {
         if (res.ok) {
           st.textContent = '';
@@ -1491,7 +1514,11 @@
         handleSendFailure(res.error || '', payload, attempt, max, st);
       })
       .catch(function (e) {
-        handleSendFailure(e.message || '', payload, attempt, max, st);
+        clearTimeout(timer);
+        var aborted = (e && (e.name === 'AbortError' ||
+                             /abort/i.test(e.message || '')));
+        handleSendFailure(aborted ? 'BUSY timeout' : (e.message || ''),
+                          payload, attempt, max, st);
       });
   }
 
@@ -1780,8 +1807,9 @@
 
     st.innerHTML = '<span class="err">' +
       (busy
-        ? 'Still busy after several tries. Nothing was lost. Please try again ' +
-          'shortly, or email nfc@nationalfreightconnection.com.'
+        ? 'Still busy after several tries. Your work may already have gone ' +
+          'through, so reload before submitting again. If it has not, please ' +
+          'try shortly or email nfc@nationalfreightconnection.com.'
         : esc(msg)) + '</span>';
     document.getElementById('send').disabled = false;
   }
