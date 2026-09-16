@@ -95,6 +95,10 @@
   .livebox { display: flex; align-items: center; gap: 6px; font-size: 13px;
              color: #444; margin: 8px 0 2px; cursor: pointer; }
   .livebox input { width: auto; margin: 0; }
+  .clearbtn { font: inherit; font-size: 12.5px; padding: 6px 12px;
+              border: 1px solid #9aa39e; border-radius: 3px; background: #fff;
+              color: #444; cursor: pointer; }
+  .clearbtn:hover { border-color: #0d3320; color: #0d3320; }
   .livefields { display: none; }
   .livefields.on { display: block; }
 
@@ -826,15 +830,17 @@
         // until the box is ticked; for a live-load carrier it has no class and
         // is simply visible.
         //
-        // EXCEPT when the trailer is already in the yard.
+        // HIDDEN, not absent, when the trailer is already in the yard.
         //
-        // AT ADC means it arrived and we know it arrived. Asking for an ETA
-        // then is asking when something will get somewhere it already is, and
-        // a date field prefilled with today invites an answer that overwrites
-        // a known arrival with a guess.
-        if (!atYard) {
+        // Asking for an ETA on a trailer that has arrived invites an answer
+        // that overwrites a known arrival with a guess, so the fields are out
+        // of the way by default. They still exist in the page, because a load
+        // that has not been picked up yet can still change: a driver calls in
+        // sick, a trailer gets swapped. Clear puts them back.
+        {
           html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
-                                         : '') + '" data-live="' + i + '">' +
+                                         : '') + '" data-live="' + i + '"' +
+                  (atYard ? ' style="display:none;"' : '') + '>' +
                   // Trailer on its own line, ETA underneath.
                   //
                   // Three controls were sharing one row inside the
@@ -854,9 +860,21 @@
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
                   '</div></div></div>';
         }
-        // Nothing in place of the fields. The status line above already says
-        // "on site", so a second sentence saying the same thing is noise on a
-        // card that is otherwise finished.
+
+        // Clear, on anything not yet loaded or gone.
+        //
+        // Until a load is picked up the driver and the trailer can still
+        // change, and a carrier had no way to say so: the driver list only
+        // offered other drivers, and on an arrived trailer the fields were not
+        // on screen at all. This empties both and brings the fields back, so
+        // the correction is one click and then typing, rather than a phone
+        // call to us.
+        if (!l.loaded && !l.gone) {
+          html += '<div style="margin-top:8px;">' +
+                  '<button type="button" class="clearbtn" data-i="' + i + '" ' +
+                  'onclick="clearShipment(' + i + ')">Clear driver and trailer' +
+                  '</button></div>';
+        }
       }
       html += '</div></div></div>';
     });
@@ -970,6 +988,24 @@
   // Ticking it reveals the trailer and ETA fields for that load. Unticking
   // clears them, so a box turned off cannot leave a trailer behind that we
   // would then reserve nothing against.
+  // Empties the card and reveals the fields. Nothing is sent until Submit, so
+  // this is a local reset rather than an instruction to us.
+  function clearShipment(i) {
+    var card = document.querySelector('[data-live="' + i + '"]');
+    if (card) card.style.display = '';
+
+    var drv = document.querySelector('.drv[data-i="' + i + '"]');
+    if (drv) { drv.value = ''; onDrv(drv); }
+
+    ['.ltl', '.letad', '.letat'].forEach(function (sel) {
+      var el = document.querySelector(sel + '[data-i="' + i + '"]');
+      if (el) el.value = '';
+    });
+
+    var d = document.querySelector('.letad[data-i="' + i + '"]');
+    if (d) d.value = todayValue();
+  }
+
   function onLive(box) {
     var i = box.getAttribute('data-i');
     var wrap = document.querySelector('.livefields[data-live="' + i + '"]');
