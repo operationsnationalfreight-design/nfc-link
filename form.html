@@ -1058,7 +1058,8 @@
   }
 
   function submitForm() {
-    var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [] };
+    var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [],
+              clears: [] };
     var problem = '', seenEdit = {};
 
     // A driver can run several loads. They cannot be in two places on the
@@ -1119,6 +1120,17 @@
 
         p.newDrivers.push({ name: n, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
         p.assignments.push({ bol: l.bol, driver: n });
+      } else if (!val && (INIT[i] || {}).driver) {
+        // Cleared. The driver was on the card when it rendered and is not now.
+        //
+        // This produced nothing at all before: the collector skipped a blank
+        // driver, so pressing Clear and submitting returned "Nothing
+        // submitted" and the carrier had every reason to think it had worked.
+        // An emptied field is a statement, and it needs to travel as one.
+        p.clears.push({ bol: l.bol,
+                        driver: INIT[i].driver,
+                        tl: (INIT[i] || {}).ltl || '' });
+
       } else if (val) {
         var init = INIT[i] || { driver: '', mobile: '', dl: '', tk: '' };
 
@@ -1218,7 +1230,7 @@
       return;
     }
     if (!p.newDrivers.length && !p.driverEdits.length &&
-        !p.assignments.length && !p.incoming.length) {
+        !p.assignments.length && !p.incoming.length && !p.clears.length) {
       document.getElementById('status').innerHTML = '<span class="err">Nothing to send yet.</span>';
       return;
     }
