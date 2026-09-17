@@ -1635,11 +1635,19 @@
           //
           // The form has the payload in its hand. It does not need a round
           // trip to learn what it just sent.
+          // Loudly. A silent catch here hid the fact that this was failing at
+          // all: the card kept showing the old driver until the refresh caught
+          // up seconds later, and nothing anywhere said why.
           try {
-            LOCALQ = LOCALQ.concat([{ data: payload, at: Date.now() }]);
-            applyQueued(LOADS, [{ data: payload }]);
+            var mine = { data: payload, at: Date.now() };
+            LOCALQ = LOCALQ.concat([mine]);
+            applyQueued(LOADS, [mine]);
             renderAll();
-          } catch (e) {}
+            console.log('[form] applied locally',
+                        JSON.stringify(payload).slice(0, 300));
+          } catch (e) {
+            console.error('[form] LOCAL APPLY FAILED', e && (e.stack || e.message));
+          }
 
           // And the real refresh behind the confirmation, which reconciles
           // this against what we actually hold once KV catches up.
