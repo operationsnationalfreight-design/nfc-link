@@ -1797,14 +1797,23 @@
   }
 
   function pendingActs(l) {
-    // QUEUED ONLY.
+    // BOTH LISTS, DEDUPED BY IDENTITY.
     //
-    // It is already the merged list: applyPayload sets it to the edge's view
-    // plus whatever of ours the board has not caught up on. Concatenating
-    // LOCALQ on top counted every local submission twice the moment the edge
-    // reported it, which is why one removal read as two.
+    // Reading QUEUED alone was wrong in the other direction: right after a
+    // submission the entry exists only in LOCALQ, so the card showed the load
+    // as though nothing had been submitted until a refresh merged the two.
+    //
+    // Concatenating blindly was the original fault, since mergeQueued puts the
+    // SAME objects from LOCALQ into QUEUED and each was then counted twice.
+    // That is also what makes identity the right test: the duplicate is
+    // literally the same object, not a copy that happens to match.
     var out = [];
-    ordered(QUEUED).forEach(function (q) {
+    var seenQ = [];
+    ordered((QUEUED || []).concat(LOCALQ || [])).filter(function (q) {
+      if (seenQ.indexOf(q) !== -1) return false;
+      seenQ.push(q);
+      return true;
+    }).forEach(function (q) {
       var d = (q && q.data) || {};
       (d.assignments || []).forEach(function (a) {
         if (a.bol === l.bol) out.push((a.driver || 'Driver') + ' assigned');
