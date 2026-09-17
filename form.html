@@ -1835,6 +1835,31 @@
     });
   }
 
+  // One submission, once, whichever list it arrived in.
+  //
+  // The same submission comes back two ways: LOCALQ holds the object we sent,
+  // and the edge returns its own copy parsed out of KV. Identical content,
+  // different objects, so an identity check never matched them and every
+  // action was listed twice. With two actions in one submission the repeats
+  // are not even adjacent, which is why collapsing consecutive lines missed
+  // it: assigned, trailer, assigned, trailer.
+  //
+  // Compared on the payload itself. Two deliberate submissions of exactly the
+  // same thing collapse too, which is correct: promote applies one of them and
+  // supersedes the other, so one line is what actually happens.
+  function uniqueSubs(list) {
+    var seen = {}, out = [];
+    ordered(list).forEach(function (q) {
+      var k;
+      try { k = JSON.stringify((q && q.data) || {}); }
+      catch (e) { k = String(Math.random()); }   // unserialisable: keep it
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(q);
+    });
+    return out;
+  }
+
   function pendingActs(l) {
     // BOTH LISTS, DEDUPED BY IDENTITY.
     //
@@ -1847,12 +1872,7 @@
     // That is also what makes identity the right test: the duplicate is
     // literally the same object, not a copy that happens to match.
     var out = [];
-    var seenQ = [];
-    ordered((QUEUED || []).concat(LOCALQ || [])).filter(function (q) {
-      if (seenQ.indexOf(q) !== -1) return false;
-      seenQ.push(q);
-      return true;
-    }).forEach(function (q) {
+    uniqueSubs((QUEUED || []).concat(LOCALQ || [])).forEach(function (q) {
       var d = (q && q.data) || {};
       (d.assignments || []).forEach(function (a) {
         if (a.bol === l.bol) out.push((a.driver || 'Driver') + ' assigned');
@@ -1914,7 +1934,7 @@
     // different answers, so the order is enforced rather than assumed.
     //
     // Same rule promote applies: the newest submission for a load wins.
-    ordered(queued).forEach(function (q) {
+    uniqueSubs(queued).forEach(function (q) {
       var d = (q && q.data) || {};
       var find = function (bol) {
         return (loads || []).filter(function (l) { return l.bol === bol; })[0];
