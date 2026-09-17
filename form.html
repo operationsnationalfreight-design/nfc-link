@@ -647,6 +647,17 @@
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
   }
 
+  // A RETURN, by its BOL.
+  //
+  // Outbound BOLs are S0869678 for GEA or six digits for WTB. A return is
+  // RET-1069652790-01 or B21439060, and both forms turn up. Matched on shape
+  // rather than on a flag, because nothing on the record says "return" and the
+  // BOL is the one field that always does.
+  function isReturn(l) {
+    var b = String((l && l.bol) || '').trim().toUpperCase();
+    return /^RET-/.test(b) || /^B\d+$/.test(b);
+  }
+
   function driverOptions(sel, assigned) {
     // The top entry IS the removal.
     //
@@ -1273,6 +1284,14 @@
     // come from adding a second load to a driver who was already working.
     var dayOf = {};
     LOADS.forEach(function (ld, k) {
+      // RETURNS DO NOT COUNT.
+      //
+      // A return is already on a trailer heading in, so the same driver can
+      // and often does carry one alongside an outbound on the same day. The
+      // clash rule exists for two outbound appointments a driver cannot both
+      // make, and a return is not that.
+      if (isReturn(ld)) return;
+
       var sl = document.querySelector('.drv[data-i="' + k + '"]');
       var name = sl ? (sl.value === '__NEW__' ? v('nn', k) : sl.value)
                     : (ld.pendingDriver || ld.driver);
@@ -1287,9 +1306,9 @@
       var sel = document.querySelector('.drv[data-i="' + i + '"]');
       var val = sel ? sel.value : '';
 
-      // Same day, same driver, two loads.
+      // Same day, same driver, two loads. Returns are exempt, above.
       var who = (val === '__NEW__') ? v('nn', i) : val;
-      if (who && l.delv) {
+      if (who && l.delv && !isReturn(l)) {
         var clash = dayOf[who + '|' + l.delv] || [];
         if (clash.length > 1) {
           problem = who + ' is on ' + clash.length + ' loads delivering ' +
