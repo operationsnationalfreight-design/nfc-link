@@ -2205,7 +2205,18 @@
         // the copy really is stale. So the worst case is alternating, and the
         // normal case is one fallback followed by a return to the edge as soon
         // as anything pushes.
+        // AND THE AGE, which is the half I left out.
+        //
+        // Setting LAST_EDGE without LAST_AGE achieved nothing: the next poll
+        // tests both, saw the old age still past the window, and fell back
+        // again. Every poll, forever, which is the thirty second rhythm that
+        // survived the last two fixes.
+        //
+        // Zero is the truth here rather than an optimistic guess: doGet pushes
+        // the payload it just built back to the edge before returning, so the
+        // copy is current as of this moment.
         LAST_EDGE = true;
+        LAST_AGE  = 0;
 
         if (!p.ok) return;
         // Apps Script cannot see the edge queue, so a payload from it carries
