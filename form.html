@@ -2177,6 +2177,21 @@
           { method: 'GET', redirect: 'follow' })
       .then(function (r) { return r.json(); })
       .then(function (p) {
+        // TRY THE EDGE AGAIN NEXT TIME.
+        //
+        // Falling back to Apps Script left LAST_EDGE false and nothing ever
+        // set it back, so one stale moment pinned the form to the expensive
+        // path for the rest of the session: a doGet every thirty seconds,
+        // forever, per open form. That is 120 executions an hour against the
+        // same book everything else is using, which is the exact load the
+        // trust window exists to prevent.
+        //
+        // checkEdge reads the age and decides honestly, dropping back here if
+        // the copy really is stale. So the worst case is alternating, and the
+        // normal case is one fallback followed by a return to the edge as soon
+        // as anything pushes.
+        LAST_EDGE = true;
+
         if (!p.ok) return;
         // Apps Script cannot see the edge queue, so a payload from it carries
         // no queued items. Applying it as-is would drop a submission that has
