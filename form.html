@@ -1597,18 +1597,28 @@
       });
   }
 
-  // Continue: pull the board again so the carrier sees their submission come
-  // back as pending, then close the confirmation.
+  // Continue: close immediately, refresh behind them.
+  //
+  // This used to hold the confirmation open while a fresh payload was fetched,
+  // which is another two to three seconds of a carrier watching a spinner
+  // AFTER their work was already safely recorded. It also put a second
+  // request into the same execution pool their submission just queued for.
+  //
+  // The board on screen is already correct: pendingClear, pendingDriver and
+  // the rest are rendered from what they just did. The refetch only confirms
+  // it, so it can happen behind the closed overlay and repaint if anything
+  // differs.
   function refreshBoard() {
+    document.getElementById('ovl').className = '';
+    window.scrollTo(0, 0);
+
     var btn = document.getElementById('ovlbtn');
-    btn.disabled = true;
-    btn.textContent = 'Refreshing...';
-    loadBoard(function() {
-      document.getElementById('ovl').className = '';
-      btn.disabled = false;
-      btn.textContent = 'Continue';
-      window.scrollTo(0, 0);
-    }, true);
+    btn.disabled = false;
+    btn.textContent = 'Continue';
+
+    // Quietly. A failure here is not the carrier's problem: their submission
+    // is already in, and the poller will catch up on its own.
+    try { loadBoard(null, true); } catch (e) {}
   }
 
   // Nothing is on screen until the board arrives, so the wait sits under our
