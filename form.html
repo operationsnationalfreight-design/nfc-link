@@ -657,6 +657,34 @@
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
   }
 
+  // Has the LAST delivery appointment passed, with grace?
+  //
+  // The same rule the payload uses, deliberately. If the two disagreed, a
+  // provisional load would either linger after the payload had written it off
+  // or vanish while the payload still considered it live.
+  var DELV_GRACE_HOURS = 3;
+
+  function delvPassed(l) {
+    var stops = (l && l.stops) || [];
+    var dels = stops.filter(function (s) { return /delivery/i.test(s.type || ''); });
+    var last = dels.length ? dels[dels.length - 1] : null;
+
+    if (last && last.date && last.time) {
+      var m = String(last.date).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      var t = String(last.time).match(/^(\d{1,2}):(\d{2})$/);
+      if (m && t) {
+        var due = new Date(+m[3], +m[1] - 1, +m[2], +t[1], +t[2]);
+        return Date.now() > due.getTime() + DELV_GRACE_HOURS * 3600000;
+      }
+    }
+
+    var dv = String((l && l.delv) || '').trim();
+    if (!dv) return false;
+    var n = new Date(), p2 = function (x) { return ('0' + x).slice(-2); };
+    var today = n.getFullYear() + '-' + p2(n.getMonth() + 1) + '-' + p2(n.getDate());
+    return dv < today;
+  }
+
   // A RETURN, by its BOL.
   //
   // Outbound BOLs are S0869678 for GEA or six digits for WTB. A return is
@@ -1645,6 +1673,21 @@
     // dropped. An Apps Script read has no idea these exist.
     var incoming = (p.loads || []).filter(function (l) { return l.provisional; });
     if (incoming.length) PROV = incoming;
+
+    // PROVISIONAL LOADS EXPIRE.
+    //
+    // They are held because a shipment exists on a site sheet before it
+    // reaches MASTER, and an Apps Script read cannot see it. That is right
+    // while it is pending and wrong forever afterwards: once the load
+    // DELIVERS, MASTER stops returning it, the payload correctly omits it, and
+    // this put it straight back. A carrier was still being shown a shipment
+    // that ran yesterday, with no pickup line and sorted to the bottom,
+    // because it was built from the site sheet rather than from MASTER.
+    //
+    // Same rule the payload itself uses: delivered is delivered.
+    if (PROV.length) {
+      PROV = PROV.filter(function (l) { return !delvPassed(l); });
+    }
 
     if (PROV.length) {
       var have = {};
