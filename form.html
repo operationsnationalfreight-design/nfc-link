@@ -1877,7 +1877,21 @@
       });
     });
 
-    return out;
+    // Identical lines collapse.
+    //
+    // Two submissions saying the same thing are genuinely in flight when one
+    // is still queued at the edge and the carrier repeats it, and the outcome
+    // is the same either way. "TEST assigned" twice tells them nothing the one
+    // line does not, and reads as a bug.
+    //
+    // Only CONSECUTIVE repeats, so assigned, removed, assigned still shows all
+    // three: that sequence is the story.
+    var tidy = [];
+    out.forEach(function (line) {
+      if (tidy.length && tidy[tidy.length - 1] === line) return;
+      tidy.push(line);
+    });
+    return tidy;
   }
 
   // Folds queued submissions onto the loads.
