@@ -435,7 +435,8 @@
                .trim().toUpperCase();
   var SPOTTED = false;   // only jump once, not on every background refresh
   var LAST_EDGE = false; // which path answered, for the console line
-  var QUEUED = [];       // submissions still sitting at the edge
+  var QUEUED = [];       // submissions the edge reports as queued
+  var LOCALQ = [];       // what WE sent, until the board shows it
   var LAST_AGE  = 0;
 
   // Loads the edge knew about but MASTER does not yet.
@@ -1590,8 +1591,8 @@
           // The form has the payload in its hand. It does not need a round
           // trip to learn what it just sent.
           try {
+            LOCALQ = LOCALQ.concat([{ data: payload, at: Date.now() }]);
             applyQueued(LOADS, [{ data: payload }]);
-            QUEUED = QUEUED.concat([{ data: payload }]);
             renderAll();
           } catch (e) {}
 
@@ -1657,8 +1658,68 @@
     // Folded into the same pending fields an applied-but-not-promoted row
     // uses, so the card shows "Received: <name>" exactly as it does today and
     // nothing downstream has to learn a third state.
-    applyQueued(p.loads || [], p.queued || []);
+    // EVERY payload gets the local queue folded in, not just the edge's view.
+    //
+    // applyPayload REPLACES the loads, so anything applied locally is gone the
+    // moment a refresh lands. The post-submit refresh runs seconds after the
+    // submission, KV's list has not caught up, the payload reports nothing
+    // queued, and the pending state the carrier just watched appear is wiped.
+    // That is why it took two or three refreshes: they were waiting for KV to
+    // catch up while the form kept undoing itself in between.
+    p.queued = mergeQueued(p.queued || [], p.loads || []);
+    QUEUED = p.queued;
+
+    applyQueued(p.loads || [], p.queued);
     renderAll();
+  }
+
+  // What the edge reports, plus anything we sent that it has not caught up on.
+  //
+  // A local entry is dropped once the board itself shows the change, which is
+  // the only honest signal that it is no longer merely queued: the drain has
+  // run and CF.INBOX is reporting it, or promote has applied it outright.
+  // Without that test a local entry would linger and keep re-asserting a
+  // pending state after the real one arrived.
+  function mergeQueued(fromEdge, loads) {
+    var out = (fromEdge || []).slice();
+
+    var find = function (bol) {
+      return (loads || []).filter(function (l) { return l.bol === bol; })[0];
+    };
+
+    // Already represented by the edge, so ours would be a duplicate.
+    var seen = {};
+    out.forEach(function (q) {
+      ((q.data || {}).assignments || []).forEach(function (a) { seen[a.bol] = true; });
+      ((q.data || {}).removeDrivers || []).forEach(function (c) { seen[c.bol] = true; });
+    });
+
+    (LOCALQ || []).forEach(function (q) {
+      var d = q.data || {};
+      var live = false;
+
+      (d.assignments || []).forEach(function (a) {
+        var l = find(a.bol);
+        if (seen[a.bol]) return;
+        // Not yet showing on the board in any form, so still ours to assert.
+        if (l && l.driver !== a.driver && l.pendingDriver !== a.driver) live = true;
+      });
+      (d.removeDrivers || []).forEach(function (c) {
+        var l = find(c.bol);
+        if (seen[c.bol]) return;
+        if (l && (l.driver || l.pendingDriver) && !l.pendingClear) live = true;
+      });
+      (d.removeTrailers || []).forEach(function (c) {
+        var l = find(c.bol);
+        if (l && l.tl && !l.pendingTrailerClear) live = true;
+      });
+      (d.incoming || []).forEach(function () { live = true; });
+      (d.driverEdits || []).forEach(function () { live = true; });
+
+      if (live) out.push(q);
+    });
+
+    return out;
   }
 
   // Folds queued submissions onto the loads.
@@ -1920,8 +1981,6 @@
         // no queued items. Applying it as-is would drop a submission that has
         // not drained yet off the board. Carried across from what we already
         // have rather than asking the edge again.
-        if (!p.queued && QUEUED.length) p.queued = QUEUED;
-
         var after = JSON.stringify(p.loads || []) +
                     JSON.stringify(p.onsite || []) +
                     JSON.stringify(p.drivers || []);
