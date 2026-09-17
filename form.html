@@ -896,7 +896,15 @@
         //
         // Shown when they have already said live, so unticking is possible
         // right up until we act on it.
-        if (POOL && (l.live || (!l.tl && !l.loaded && !l.gone))) {
+        // A RETURN NEVER GETS THE BOX.
+        //
+        // Live load means the carrier is bringing their own trailer to load
+        // into. A return is already loaded and already on a trailer heading
+        // in, so the question does not apply, and ticking it would put the
+        // load on CF.INBOX as a LIVE TRAILER for equipment that is under the
+        // freight.
+        if (POOL && !isReturn(l) &&
+            (l.live || (!l.tl && !l.loaded && !l.gone))) {
           html += '<label class="livebox">' +
                   '<input type="checkbox" class="live" data-i="' + i + '"' +
                   (l.live ? ' checked' : '') + ' onchange="onLive(this)">' +
