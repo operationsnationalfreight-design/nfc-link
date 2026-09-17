@@ -651,7 +651,9 @@
     return '<div class="inc"><input class="tl" placeholder="Trailer #">' +
            '<input class="ed" type="date" title="ETA date" value="' +
            todayValue() + '">' +
-           '<input class="et2" type="time" title="ETA time"></div>';
+           '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
+           'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
+           'oninput="onHHMM(this)"></div>';
   }
   function addIncoming() {
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
@@ -683,6 +685,33 @@
     var n = new Date(), p2 = function (x) { return ('0' + x).slice(-2); };
     var today = n.getFullYear() + '-' + p2(n.getMonth() + 1) + '-' + p2(n.getDate());
     return dv < today;
+  }
+
+  // 24 HOUR, TYPED, NOT PICKED.
+  //
+  // A native time input renders in whatever format the operating system is
+  // set to, and nothing in HTML overrides that, so half the carriers saw
+  // AM/PM and there was no way to ask for 24 hour. A plain text box always
+  // reads the same on every machine.
+  //
+  // The colon appears on its own as they type, so "0600" becomes "06:00"
+  // without anyone reaching for punctuation on a phone keypad.
+  function onHHMM(el) {
+    var d = String(el.value || '').replace(/[^\d]/g, '').slice(0, 4);
+    if (d.length >= 3) el.value = d.slice(0, 2) + ':' + d.slice(2);
+    else el.value = d;
+  }
+
+  // "930" -> "09:30", "9:5" -> "09:05", junk -> "". Read on submit, so a
+  // carrier who types four digits and never touches the colon is still
+  // understood.
+  function hhmm(v) {
+    var d = String(v || '').replace(/[^\d]/g, '');
+    if (d.length === 3) d = '0' + d;
+    if (d.length !== 4) return '';
+    var h = Number(d.slice(0, 2)), m = Number(d.slice(2));
+    if (h > 23 || m > 59) return '';
+    return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
   }
 
   // A RETURN, by its BOL.
@@ -995,7 +1024,9 @@
                   '<div class="etarow">' +
                   '<input class="letad" type="date" data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).date || todayValue()) + '">' +
-                  '<input class="letat" type="time" data-i="' + i +
+                  '<input class="letat hhmm" type="text" inputmode="numeric" ' +
+                  'maxlength="5" placeholder="HH:MM" oninput="onHHMM(this)" ' +
+                  'data-i="' + i +
                   '" value="' + esc(etaSplit(l.eta).time) + '">' +
                   '</div></div></div>';
         }
@@ -1482,7 +1513,7 @@
         // bringing one. Without that check an untouched card would submit the
         // trailer we assigned them back to us as though they had chosen it.
         if (POOL && !isLive) return;
-        var ed = v('letad', i), et = v('letat', i);
+        var ed = v('letad', i), et = hhmm(v('letat', i));
 
         // Both or neither, but only once a trailer is named.
         //
@@ -1523,7 +1554,7 @@
       if (!tl) return;
 
       var pd = r.querySelector('.ed').value;
-      var pt = r.querySelector('.et2').value;
+      var pt = hhmm(r.querySelector('.et2').value);
       if ((pd && !pt) || (!pd && pt)) {
         problem = 'Incoming trailer ' + tl +
                   ' needs both a date and a time for its ETA.';
