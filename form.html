@@ -1579,7 +1579,24 @@
           }).join('');
           ul.style.display = (res.details || []).length > 1 ? 'block' : 'none';
 
-          // Starts now, not on Continue.
+          // APPLIED LOCALLY, IMMEDIATELY.
+          //
+          // Not waiting to be told. KV is readable by key the moment it is
+          // written, but the LIST call that finds it lags by seconds, so a
+          // refresh straight after a submission asks the edge what is queued
+          // and is correctly told nothing yet. That is why pending took two or
+          // three refreshes to appear.
+          //
+          // The form has the payload in its hand. It does not need a round
+          // trip to learn what it just sent.
+          try {
+            applyQueued(LOADS, [{ data: payload }]);
+            QUEUED = QUEUED.concat([{ data: payload }]);
+            renderAll();
+          } catch (e) {}
+
+          // And the real refresh behind the confirmation, which reconciles
+          // this against what we actually hold once KV catches up.
           startRefresh();
           document.getElementById('ovl').className = 'on';
           TOUCHED = false;      // their work is in; polling can resume
@@ -1640,18 +1657,41 @@
     // Folded into the same pending fields an applied-but-not-promoted row
     // uses, so the card shows "Received: <name>" exactly as it does today and
     // nothing downstream has to learn a third state.
-    (p.queued || []).forEach(function (q) {
+    applyQueued(p.loads || [], p.queued || []);
+    renderAll();
+  }
+
+  // Folds queued submissions onto the loads.
+  //
+  // Used for what the edge reports AND for what we just sent, because those
+  // are the same shape and the second one has to work without waiting for the
+  // first. KV is readable by key immediately but its LIST call lags by
+  // seconds, so a refresh straight after a submission asks the edge what is
+  // queued and is honestly told nothing. That is why pending took two or three
+  // refreshes to appear.
+  //
+  // The form knows what it sent. It does not need to be told.
+  function applyQueued(loads, queued) {
+    (queued || []).forEach(function (q) {
       var d = (q && q.data) || {};
+      var find = function (bol) {
+        return (loads || []).filter(function (l) { return l.bol === bol; })[0];
+      };
+
       (d.assignments || []).forEach(function (a) {
-        var hit = (p.loads || []).filter(function (l) { return l.bol === a.bol; })[0];
-        if (hit && !hit.pendingDriver) hit.pendingDriver = a.driver;
+        var hit = find(a.bol);
+        if (hit) hit.pendingDriver = a.driver;
+      });
+      (d.newDrivers || []).forEach(function (n) {
+        var hit = find(n.bol);
+        if (hit && n.name) hit.pendingDriver = n.name;
       });
       (d.removeDrivers || []).forEach(function (c) {
-        var hit = (p.loads || []).filter(function (l) { return l.bol === c.bol; })[0];
-        if (hit) hit.pendingClear = true;
+        var hit = find(c.bol);
+        if (hit) { hit.pendingClear = true; hit.pendingDriver = ''; }
       });
       (d.removeTrailers || []).forEach(function (c) {
-        var hit = (p.loads || []).filter(function (l) { return l.bol === c.bol; })[0];
+        var hit = find(c.bol);
         if (hit) hit.pendingTrailerClear = true;
       });
       // Incoming trailers land in the pending list the panel already renders.
@@ -1659,7 +1699,10 @@
         if (t && t.tl) PENDTL.push({ tl: t.tl, eta: t.eta || "" });
       });
     });
+  }
 
+  // Draws everything from the current state.
+  function renderAll() {
     // Live-load carriers report equipment on the shipment card, so a pool
     // list has nowhere to go for them.
     document.getElementById('inccard').style.display = POOL ? 'block' : 'none';
