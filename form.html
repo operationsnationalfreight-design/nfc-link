@@ -428,6 +428,7 @@
                .trim().toUpperCase();
   var SPOTTED = false;   // only jump once, not on every background refresh
   var LAST_EDGE = false; // which path answered, for the console line
+  var QUEUED = [];       // submissions still sitting at the edge
   var LAST_AGE  = 0;
 
   // Loads the edge knew about but MASTER does not yet.
@@ -1603,6 +1604,7 @@
     ONSITE  = p.onsite  || [];
     POOL    = !!p.pool;
     PENDTL  = p.pendingTrailers || [];
+    QUEUED  = p.queued || [];
 
     // SUBMISSIONS STILL AT THE EDGE.
     //
@@ -1660,10 +1662,27 @@
   // The first load consumes the request the head already started. A refresh
   // after submitting makes a fresh one.
   function loadBoard(onDone, fresh) {
+    // A REFRESH GOES TO THE EDGE, NOT TO APPS SCRIPT.
+    //
+    // This is the call that runs straight after a submission, and submissions
+    // now land in the edge queue. Apps Script has not seen them yet and cannot
+    // report them, so refreshing from there returned a board with the
+    // carrier's work missing and wiped the pending state off the cards. The
+    // edge is the only place that knows about both the board AND what is
+    // still queued.
+    //
+    // Apps Script stays as the fallback, exactly as it is on first paint.
     var p = (!fresh && window.BOARD)
       ? window.BOARD
-      : fetch(API + '?api=payload&t=' + encodeURIComponent(TOKEN),
-              { method: 'GET', redirect: 'follow' }).then(function (r) { return r.json(); });
+      : fetch(EDGE + '/payload?t=' + encodeURIComponent(TOKEN), { method: 'GET' })
+          .then(function (r) { return r.json(); })
+          .then(function (q) {
+            if (q && q.ok) return q;
+            if (q && q.error === 'expired') return q;
+            return fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(TOKEN),
+                         { method: 'GET', redirect: 'follow' })
+                     .then(function (r) { return r.json(); });
+          });
     window.BOARD = null;
     p
       .then(function (p) {
@@ -1813,6 +1832,12 @@
       .then(function (r) { return r.json(); })
       .then(function (p) {
         if (!p.ok) return;
+        // Apps Script cannot see the edge queue, so a payload from it carries
+        // no queued items. Applying it as-is would drop a submission that has
+        // not drained yet off the board. Carried across from what we already
+        // have rather than asking the edge again.
+        if (!p.queued && QUEUED.length) p.queued = QUEUED;
+
         var after = JSON.stringify(p.loads || []) +
                     JSON.stringify(p.onsite || []) +
                     JSON.stringify(p.drivers || []);
