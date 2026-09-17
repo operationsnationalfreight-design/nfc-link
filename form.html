@@ -242,6 +242,12 @@
   #ovl { display: none; position: fixed; inset: 0; background: rgba(20,28,24,.55);
          z-index: 50; align-items: center; justify-content: center; padding: 20px; }
   #ovl.on { display: flex; }
+  /* The itemised list. Left aligned inside a centred box, because a list of
+     changes is read line by line and centred text makes that work. */
+  #ovllist { display: none; text-align: left; margin: 10px auto 4px;
+             padding-left: 20px; max-width: 340px; font-size: 13.5px;
+             line-height: 1.6; color: #333; }
+  #ovllist li { margin: 2px 0; }
   #ovlbox { background: #fff; border-radius: 6px; max-width: 420px; width: 100%;
             padding: 26px 24px; text-align: center;
             box-shadow: 0 10px 40px rgba(0,0,0,.3); }
@@ -385,6 +391,7 @@
       <div class="tick2">&#10004;</div>
       <h3>Thank you</h3>
       <p id="ovlmsg"></p>
+      <ul id="ovllist"></ul>
       <button id="ovlbtn" onclick="refreshBoard()">Continue</button>
     </div>
   </div>
@@ -1277,7 +1284,8 @@
               removeDrivers: [], removeTrailers: [] };
 
     Object.keys(DROPTL).forEach(function (bol) {
-      p.removeTrailers.push({ bol: bol, tl: DROPTL[bol] });
+      var rl = (LOADS || []).filter(function (x) { return x.bol === bol; })[0];
+      p.removeTrailers.push({ bol: bol, nfc: rl ? rl.nfc : '', tl: DROPTL[bol] });
     });
     var problem = '', seenEdit = {};
 
@@ -1345,8 +1353,8 @@
           return;
         }
 
-        p.newDrivers.push({ name: n, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
-        p.assignments.push({ bol: l.bol, driver: n });
+        p.newDrivers.push({ name: n, nfc: l.nfc, bol: l.bol, mobile: v('nm', i), dl: v('nd', i), tk: v('nt', i) });
+        p.assignments.push({ bol: l.bol, nfc: l.nfc, driver: n });
       } else if (EDITING[i]) {
         var ed = editFrom(i);
         if (ed && ed.clash) {
@@ -1363,7 +1371,7 @@
         // driver, so pressing Clear and submitting returned "Nothing
         // submitted" and the carrier had every reason to think it had worked.
         // An emptied field is a statement, and it needs to travel as one.
-        p.removeDrivers.push({ bol: l.bol, driver: INIT[i].driver });
+        p.removeDrivers.push({ bol: l.bol, nfc: l.nfc, driver: INIT[i].driver });
 
       } else if (val) {
         var init = INIT[i] || { driver: '', mobile: '', dl: '', tk: '' };
@@ -1372,7 +1380,7 @@
         // CARRIER instead produced phantom rows whenever MASTER and CARRIER
         // held the same number in a different format.
         if (val !== init.driver) {
-          p.assignments.push({ bol: l.bol, driver: val });
+          p.assignments.push({ bol: l.bol, nfc: l.nfc, driver: val });
         }
 
         var m = v('em', i), dl = v('ed', i), tk = v('et', i);
@@ -1450,7 +1458,7 @@
         var etaChanged = te !== inputNorm(base.leta) && !(etaUnparsed && !te);
 
         if (t !== inputNorm(base.ltl) || etaChanged) {
-          p.incoming.push({ bol: l.bol, tl: t, eta: te, live: isLive });
+          p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: te, live: isLive });
         }
       }
     });
@@ -1556,8 +1564,23 @@
       .then(function (res) {
         if (res.ok) {
           st.textContent = '';
-          document.getElementById('ovlmsg').textContent =
-            res.message + ' Continue to see it on your board.';
+          document.getElementById('ovlmsg').textContent = res.message;
+
+          // ITEMISED.
+          //
+          // A count is a receipt, not an account of what happened. A carrier
+          // who assigned one driver and took another off cannot check either
+          // from "2 changes", and checking is the only thing a confirmation is
+          // for. One line per change, naming the driver, the trailer and the
+          // shipment.
+          var ul = document.getElementById('ovllist');
+          ul.innerHTML = (res.details || []).map(function (d) {
+            return '<li>' + esc(d) + '</li>';
+          }).join('');
+          ul.style.display = (res.details || []).length > 1 ? 'block' : 'none';
+
+          // Starts now, not on Continue.
+          startRefresh();
           document.getElementById('ovl').className = 'on';
           TOUCHED = false;      // their work is in; polling can resume
           return;
@@ -1720,8 +1743,26 @@
     btn.disabled = false;
     btn.textContent = 'Continue';
 
-    // Quietly. A failure here is not the carrier's problem: their submission
-    // is already in, and the poller will catch up on its own.
+    // Already done, behind the confirmation. See startRefresh below.
+  }
+
+  // REFRESH WHILE THEY ARE READING THE CONFIRMATION.
+  //
+  // It used to start when they pressed Continue, so the board underneath was
+  // still showing the state from before their submission and only caught up a
+  // second or two later, or not until they refreshed by hand. The moment they
+  // close the box is the moment they look at the board, and it should be right
+  // by then.
+  //
+  // The submission is already recorded, so this is a read that nobody is
+  // waiting on. It runs while the confirmation is on screen, which is dead
+  // time we were not using.
+  //
+  // TOUCHED is cleared first: the carrier's edits are what they just sent, so
+  // treating them as unsaved work would make the refresh offer to reload
+  // instead of simply applying.
+  function startRefresh() {
+    TOUCHED = false;
     try { loadBoard(null, true); } catch (e) {}
   }
 
