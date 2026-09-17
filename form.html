@@ -1788,6 +1788,14 @@
   // the card state cannot disagree. Only covers work still in the queue: once
   // it is drained onto CF.INBOX the pending flags from the payload take over,
   // which is the older single-line display below.
+  // Oldest first, on the submission time. Anything without one sorts first,
+  // since it can only be older than something we stamped.
+  function ordered(list) {
+    return (list || []).slice().sort(function (a, b) {
+      return ((a && a.at) || 0) - ((b && b.at) || 0);
+    });
+  }
+
   function pendingActs(l) {
     // QUEUED ONLY.
     //
@@ -1796,7 +1804,7 @@
     // LOCALQ on top counted every local submission twice the moment the edge
     // reported it, which is why one removal read as two.
     var out = [];
-    (QUEUED || []).forEach(function (q) {
+    ordered(QUEUED).forEach(function (q) {
       var d = (q && q.data) || {};
       (d.assignments || []).forEach(function (a) {
         if (a.bol === l.bol) out.push((a.driver || 'Driver') + ' assigned');
@@ -1835,7 +1843,16 @@
   //
   // The form knows what it sent. It does not need to be told.
   function applyQueued(loads, queued) {
-    (queued || []).forEach(function (q) {
+    // CHRONOLOGICAL, ALWAYS.
+    //
+    // These arrive from two places: the edge, where KV lists keys in
+    // lexicographic order, and our own local list appended as we send. Both
+    // happen to be in order today, which is exactly the kind of thing that
+    // stops being true quietly. Assign then remove and remove then assign are
+    // different answers, so the order is enforced rather than assumed.
+    //
+    // Same rule promote applies: the newest submission for a load wins.
+    ordered(queued).forEach(function (q) {
       var d = (q && q.data) || {};
       var find = function (bol) {
         return (loads || []).filter(function (l) { return l.bol === bol; })[0];
