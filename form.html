@@ -157,6 +157,7 @@
   .load.pend { border-left-color: #b8860b; background: #fffaf0; }
 
   .resched { color: #b8860b; font-weight: 700; }
+  .pendmsg div { font-weight: 600; }
   .pendmsg { text-align: center; font-size: 11.5px; color: #8a6d1f;
              font-weight: 700; padding-bottom: 6px; }
 
@@ -822,7 +823,23 @@
         html += '<div class="lnum2">' + tag +
                 (tag && stat ? ' &middot; ' : '') + stat + '</div>';
       }
-      if (pend) {
+      // EVERYTHING PENDING ON THIS LOAD, IN ORDER.
+      //
+      // The card used to carry one flag per kind, so assigning a driver and
+      // then removing them before we promoted showed only whichever wrote the
+      // flag last. CF.INBOX holds both rows and applies both in order, so the
+      // form was telling a smaller truth than the sheet.
+      //
+      // Listed the way they were submitted, which is the way they will be
+      // applied, so a change that supersedes an earlier one is visible as a
+      // sequence rather than silently replacing it.
+      var acts = pendingActs(l);
+      if (acts.length) {
+        html += '<div class="pendmsg"><b>Pending with us</b>' +
+                acts.map(function (a) {
+                  return '<div>' + esc(a) + '</div>';
+                }).join('') + '</div>';
+      } else if (pend) {
         html += '<div class="pendmsg">Received: ' + esc(l.pendingDriver) +
                 (l.driver ? ' &middot; replacing ' + esc(l.driver) : '') +
                 ' &middot; pending confirmation</div>';
@@ -1717,6 +1734,44 @@
       (d.driverEdits || []).forEach(function () { live = true; });
 
       if (live) out.push(q);
+    });
+
+    return out;
+  }
+
+  // What is waiting on us for this load, oldest first.
+  //
+  // Read from the same queued submissions the overlay uses, so the list and
+  // the card state cannot disagree. Only covers work still in the queue: once
+  // it is drained onto CF.INBOX the pending flags from the payload take over,
+  // which is the older single-line display below.
+  function pendingActs(l) {
+    var out = [];
+    var all = (QUEUED || []).concat(LOCALQ || []);
+
+    all.forEach(function (q) {
+      var d = (q && q.data) || {};
+      (d.assignments || []).forEach(function (a) {
+        if (a.bol === l.bol) out.push((a.driver || 'Driver') + ' assigned');
+      });
+      (d.newDrivers || []).forEach(function (n) {
+        if (n.bol === l.bol && n.name) out.push(n.name + ' added and assigned');
+      });
+      (d.removeDrivers || []).forEach(function (c) {
+        if (c.bol === l.bol) {
+          out.push((c.driver ? c.driver + ' removed' : 'Driver removed'));
+        }
+      });
+      (d.removeTrailers || []).forEach(function (c) {
+        if (c.bol === l.bol) {
+          out.push('Trailer ' + (c.tl || '') + ' removed');
+        }
+      });
+      (d.incoming || []).forEach(function (t) {
+        if (t.bol === l.bol && t.tl) {
+          out.push('Trailer ' + t.tl + (t.eta ? ' arriving ' + t.eta : ''));
+        }
+      });
     });
 
     return out;
