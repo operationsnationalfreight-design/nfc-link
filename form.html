@@ -1494,10 +1494,33 @@
       if (ctrl) ctrl.abort();
     }, 30000);
 
-    fetch(API, {
+    // THE EDGE TAKES THE WRITE, APPS SCRIPT IS THE FALLBACK.
+    //
+    // Posting to Apps Script meant waiting on an execution slot shared with
+    // every ops job in the book: 4 to 13 seconds normally, and on the morning
+    // of the 17th a submission failed outright while a promote held a slot for
+    // 63 seconds. The work is an append to one tab; the waiting was everything
+    // else.
+    //
+    // The edge verifies the same token with the same secret, writes to KV, and
+    // answers in about 100ms whatever Google is doing. Apps Script drains it on
+    // its own schedule.
+    //
+    // Falling back on ANY edge failure, including a non-ok response, because a
+    // submission that cannot reach the edge must still reach us. The old path
+    // is slower, not worse.
+    var useEdge = (attempt === 0 || attempt === 1);
+    var target = useEdge
+      ? EDGE + '/submit?t=' + encodeURIComponent(TOKEN)
+      : API;
+    var body = useEdge
+      ? JSON.stringify({ data: payload })
+      : JSON.stringify({ api: 'submit', t: TOKEN, data: payload });
+
+    fetch(target, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ api: 'submit', t: TOKEN, data: payload }),
+      body: body,
       redirect: 'follow',
       signal: ctrl ? ctrl.signal : undefined
     })
@@ -1511,7 +1534,11 @@
           TOUCHED = false;      // their work is in; polling can resume
           return;
         }
-        handleSendFailure(res.error || '', payload, attempt, max, st);
+        // An edge refusal is not a dead end. Retrying moves to Apps Script,
+        // which is the path that worked yesterday.
+        handleSendFailure(useEdge ? 'BUSY edge: ' + (res.error || 'refused')
+                                  : (res.error || ''),
+                          payload, attempt, max, st);
       })
       .catch(function (e) {
         clearTimeout(timer);
@@ -1549,6 +1576,37 @@
     ONSITE  = p.onsite  || [];
     POOL    = !!p.pool;
     PENDTL  = p.pendingTrailers || [];
+
+    // SUBMISSIONS STILL AT THE EDGE.
+    //
+    // Between pressing Submit and Apps Script draining, a submission exists in
+    // KV and nowhere else. The board comes from MASTER, so it knows nothing
+    // about it, and without this the carrier reloads and watches the driver
+    // they just entered disappear. That is the single worst thing this form
+    // could do.
+    //
+    // Folded into the same pending fields an applied-but-not-promoted row
+    // uses, so the card shows "Received: <name>" exactly as it does today and
+    // nothing downstream has to learn a third state.
+    (p.queued || []).forEach(function (q) {
+      var d = (q && q.data) || {};
+      (d.assignments || []).forEach(function (a) {
+        var hit = (p.loads || []).filter(function (l) { return l.bol === a.bol; })[0];
+        if (hit && !hit.pendingDriver) hit.pendingDriver = a.driver;
+      });
+      (d.removeDrivers || []).forEach(function (c) {
+        var hit = (p.loads || []).filter(function (l) { return l.bol === c.bol; })[0];
+        if (hit) hit.pendingClear = true;
+      });
+      (d.removeTrailers || []).forEach(function (c) {
+        var hit = (p.loads || []).filter(function (l) { return l.bol === c.bol; })[0];
+        if (hit) hit.pendingTrailerClear = true;
+      });
+      // Incoming trailers land in the pending list the panel already renders.
+      (d.incoming || []).forEach(function (t) {
+        if (t && t.tl) PENDTL.push({ tl: t.tl, eta: t.eta || "" });
+      });
+    });
 
     // Live-load carriers report equipment on the shipment card, so a pool
     // list has nowhere to go for them.
