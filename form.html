@@ -1789,10 +1789,14 @@
   // it is drained onto CF.INBOX the pending flags from the payload take over,
   // which is the older single-line display below.
   function pendingActs(l) {
+    // QUEUED ONLY.
+    //
+    // It is already the merged list: applyPayload sets it to the edge's view
+    // plus whatever of ours the board has not caught up on. Concatenating
+    // LOCALQ on top counted every local submission twice the moment the edge
+    // reported it, which is why one removal read as two.
     var out = [];
-    var all = (QUEUED || []).concat(LOCALQ || []);
-
-    all.forEach(function (q) {
+    (QUEUED || []).forEach(function (q) {
       var d = (q && q.data) || {};
       (d.assignments || []).forEach(function (a) {
         if (a.bol === l.bol) out.push((a.driver || 'Driver') + ' assigned');
