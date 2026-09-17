@@ -2130,13 +2130,28 @@
   var POLL_MS = 30000;
   var polling = null;
 
+  // JITTERED, so windows do not poll in lockstep.
+  //
+  // Three forms open on one carrier all polled on the same second, all saw the
+  // edge copy expire at the same instant, and all three called Apps Script
+  // before any of them had pushed the refresh. Three executions where one
+  // would do, every trust window, and it gets worse the more windows are open.
+  //
+  // A few seconds of spread is enough: the first to fall back re-arms the
+  // cache and the rest are served from the edge. setTimeout rather than
+  // setInterval because the delay has to change each round.
+  function pollDelay() {
+    return POLL_MS + Math.floor(Math.random() * 8000) - 4000;   // 26s to 34s
+  }
+
   function startPolling() {
     if (polling) return;
-    polling = setInterval(function () {
+    var tick = function () {
       // Nothing to gain polling a tab nobody is looking at.
-      if (document.hidden) return;
-      revalidate();
-    }, POLL_MS);
+      if (!document.hidden) revalidate();
+      polling = setTimeout(tick, pollDelay());
+    };
+    polling = setTimeout(tick, pollDelay());
   }
 
   // Catch up the moment they come back to the tab.
