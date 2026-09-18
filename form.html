@@ -227,9 +227,19 @@
   /* En route rows: what the trailer is for on one line, the editable fields
      under it, laid out exactly like an incoming row so the two panels read
      as the same kind of entry. */
+  /* One header for every row in the card, existing and new, so what each box
+     holds is said once instead of in placeholders. Widths match .inc. */
+  .inchead { display: flex; gap: 8px; font-size: 10.5px; text-transform: uppercase;
+             color: #555; letter-spacing: .03em; padding: 2px 0 4px;
+             border-bottom: 1px solid #ddd; margin-bottom: 4px; }
+  .inchead .h1 { flex: 1 1 38%; } .inchead .h2 { flex: 1 1 36%; }
+  .inchead .h3 { flex: 1 1 26%; }
+  .incsub { font-size: 10.5px; text-transform: uppercase; color: #555;
+            letter-spacing: .03em; padding: 10px 0 5px; }
   .er { padding: 8px 0 4px; border-bottom: 1px solid #eee; }
   .er:last-child { border-bottom: 0; }
   .er .for { font-size: 12px; padding-bottom: 5px; }
+  .er .for.un { color: #999; }
   .er .for.erjump { cursor: pointer; }
   .er .for.erjump b { border-bottom: 1px dotted #9aa7a0; }
   .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 0 4px; }
@@ -368,15 +378,12 @@
         </div>
       </div>
 
-      <div class="card" id="enroutecard" style="display:none;">
-        <h2>Trailers En Route</h2>
-        <p class="note">Equipment on its way to us. Change a trailer number or ETA here if it has changed.</p>
-        <div id="enroute"></div>
-      </div>
-
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
-        <p class="note" id="incnote">Equipment heading in, with expected arrival.</p>
+        <p class="note" id="incnote">Equipment heading in. Correct a number or ETA, or add new below.</p>
+        <div class="inchead"><span class="h1">Trailer</span><span class="h2">ETA Date</span><span class="h3">ETA Time</span></div>
+        <div id="enroute"></div>
+        <div class="incsub" id="incsub" style="display:none;">Add new</div>
         <div id="incoming"></div>
         <button class="addbtn" onclick="addIncoming()">+ Add another</button>
       </div>
@@ -535,8 +542,8 @@
     }
     if (inc) {
       inc.textContent = where
-        ? 'Equipment heading to ' + where + ', with expected arrival.'
-        : 'Equipment heading in, with expected arrival.';
+        ? 'Equipment heading to ' + where + '. Correct a number or ETA, or add new below.'
+        : 'Equipment heading in. Correct a number or ETA, or add new below.';
     }
   }
 
@@ -595,7 +602,8 @@
     h.innerHTML = t + '</table>';
   }
 
-  // TRAILERS EN ROUTE. Pool carriers only.
+  // TRAILERS ALREADY ON THE WAY, at the top of the Incoming Trailers card.
+  // Pool carriers only.
   //
   // Two kinds of row, one panel, because to the carrier they are the same
   // thing: a trailer on its way whose number or ETA may have changed.
@@ -634,7 +642,10 @@
 
   function renderEnroute() {
     var rows = enrouteRows();
-    document.getElementById('enroutecard').style.display = rows.length ? 'block' : 'none';
+    // Existing trailers sit above the blank rows, so the blank rows need a
+    // label saying they are for something new. With nothing on the way the
+    // blank rows are the whole card and the label would be noise.
+    document.getElementById('incsub').style.display = rows.length ? 'block' : 'none';
     var h = document.getElementById('enroute');
     if (!rows.length) { h.innerHTML = ''; return; }
 
@@ -653,7 +664,7 @@
         ? '<div class="for erjump" data-bol="' + esc(r.bol) + '" title="Go to this shipment">' +
           '<b>' + esc(r.nfc) + '</b> | ' + esc(r.bol) +
           (r.delv ? ' &middot; DELV ' + esc(r.delv) : '') + '</div>'
-        : '<div class="for" style="color:#999;">unassigned</div>';
+        : '<div class="for un">Unassigned</div>';
 
       return '<div class="er" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
@@ -685,7 +696,8 @@
     var lines = list.map(function(t) {
       return esc(t.tl) + (t.eta ? ' &middot; ' + esc(t.eta) : '');
     }).join('<br>');
-    document.getElementById('incoming').insertAdjacentHTML('beforebegin',
+    // Above "Add new": these are already sent, not rows to fill in.
+    document.getElementById('incsub').insertAdjacentHTML('beforebegin',
       '<p class="note" id="pendtl" style="color:#8a6d1f;font-weight:700;">' +
       'Received, pending confirmation:<br>' + lines + '</p>');
   }
@@ -748,7 +760,7 @@
   }
 
   function incRow() {
-    return '<div class="inc"><input class="tl" placeholder="Trailer #">' +
+    return '<div class="inc"><input class="tl" placeholder="Trailer #" title="Trailer #">' +
            '<input class="ed" type="date" title="ETA date" value="' +
            todayValue() + '">' +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
