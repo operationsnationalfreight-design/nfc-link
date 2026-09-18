@@ -2422,7 +2422,15 @@
   // checkin and whenever a link is minted. So a copy pushed a minute ago is
   // current unless somebody typed straight into MASTER, which the poll still
   // catches within the window.
-  var EDGE_TRUST_MS = 90000;
+  //
+  // TEN MINUTES, not ninety seconds. Every change that matters pushes the
+  // board: a promote, an assign, a check-in, a submission, a Run. So the edge
+  // copy only goes stale when somebody types straight into MASTER, and the
+  // ninety second window was paying a full Apps Script execution every poll
+  // to catch that one case: a doGet every one to two minutes per open form,
+  // all afternoon. Ten minutes bounds a hand edit's delay to something a
+  // carrier will never notice, and removes almost every fallback.
+  var EDGE_TRUST_MS = 600000;
 
   function revalidate() {
     // ASK THE EDGE FIRST, AND USUALLY STOP THERE.
