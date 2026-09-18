@@ -866,12 +866,19 @@
     var last = dels.length ? dels[dels.length - 1] : null;
 
     if (last && last.date && last.time) {
+      // MM/DD/YYYY or YYYY-MM-DD; "FARMINGDALE, NY" or "FARMINGDALE NY 11735".
       var m = String(last.date).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+      var ymd = m ? [+m[3], +m[1], +m[2]] : null;
+      if (!ymd) {
+        m = String(last.date).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (m) ymd = [+m[1], +m[2], +m[3]];
+      }
       var t = String(last.time).match(/^(\d{1,2}):(\d{2})$/);
-      if (m && t) {
-        var st = String(last.city || '').toUpperCase().match(/,\s*([A-Z]{2})\b[^,]*$/);
+      if (ymd && t) {
+        var st = String(last.city || '').toUpperCase()
+                   .match(/(?:,\s*|\s)([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$/);
         var tz = (st && STATE_TZ[st[1]]) || 'America/Chicago';
-        return Date.now() > zonedMs(+m[3], +m[1], +m[2], +t[1], +t[2], tz) + grace;
+        return Date.now() > zonedMs(ymd[0], ymd[1], ymd[2], +t[1], +t[2], tz) + grace;
       }
     }
 
