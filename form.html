@@ -227,25 +227,36 @@
   /* En route rows: what the trailer is for on one line, the editable fields
      under it, laid out exactly like an incoming row so the two panels read
      as the same kind of entry. */
-  /* One header for every row in the card, existing and new, so what each box
-     holds is said once instead of in placeholders. Widths match .inc. */
-  .inchead { display: flex; gap: 8px; font-size: 10.5px; text-transform: uppercase;
-             color: #555; letter-spacing: .03em; padding: 2px 0 4px;
-             border-bottom: 1px solid #ddd; margin-bottom: 4px; }
-  .inchead .h1 { flex: 1 1 38%; } .inchead .h2 { flex: 1 1 36%; }
-  .inchead .h3 { flex: 1 1 26%; }
+  /* Trailers already on the way, one line each: LOAD | TRAILER | ETA.
+     The header and the rows share one grid so the columns line up. */
+  .inchead, .er .ln { display: grid; gap: 8px; align-items: center;
+                      grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr); }
+  .inchead { font-size: 10.5px; text-transform: uppercase; color: #555;
+             letter-spacing: .03em; padding: 2px 4px 4px;
+             border-bottom: 1px solid #ddd; }
   .incsub { font-size: 10.5px; text-transform: uppercase; color: #555;
             letter-spacing: .03em; padding: 10px 0 5px; }
-  .er { padding: 8px 0 4px; border-bottom: 1px solid #eee; }
-  .er:last-child { border-bottom: 0; }
-  .er .for { font-size: 12px; padding-bottom: 5px; }
+  .er { border-bottom: 1px solid #f0f0f0; padding: 1px 0; }
+  .er .for { font-size: 12.5px; padding-left: 4px; white-space: nowrap;
+             overflow: hidden; text-overflow: ellipsis; }
   .er .for.un { color: #999; }
   .er .for.erjump { cursor: pointer; }
   .er .for.erjump b { border-bottom: 1px dotted #9aa7a0; }
-  .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 0 4px; }
-  .inc input.tl  { flex: 1 1 38%; }
-  .inc input.ed  { flex: 1 1 36%; }
-  .inc input.et2 { flex: 1 1 26%; }
+  .er .eta { display: flex; gap: 4px; }
+  /* Reads as text until touched. The border appears on hover and stays while
+     editing, so the list is quiet but every value is still one click from
+     being changed. */
+  .er input { border-color: transparent; background: transparent;
+              padding: 5px 4px; min-height: 0; font-size: 13.5px; }
+  .er input:hover { border-color: #d5dad7; }
+  .er input:focus { border-color: #bfc5c2; background: #fff; }
+  .er .eta input { flex: 1 1 50%; }
+  /* Past due, by the carrier's own clock with an hour's grace. */
+  .er.late .eta input { color: #c62828; font-weight: 700; }
+  .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 4px 4px; }
+  .inc input.tl  { flex: 1 1 50%; }
+  .inc input.imd { flex: 1 1 25%; }
+  .inc input.et2 { flex: 1 1 25%; }
   /* Date and time pickers render taller than a text input on some browsers,
      which left the row ragged. */
   .inc input { min-height: 38px; }
@@ -381,7 +392,7 @@
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
         <p class="note" id="incnote">Equipment heading in. Correct a number or ETA, or add new below.</p>
-        <div class="inchead"><span class="h1">Trailer</span><span class="h2">ETA Date</span><span class="h3">ETA Time</span></div>
+        <div class="inchead" id="inchead" style="display:none;"><span>Load</span><span>Trailer</span><span>ETA</span></div>
         <div id="enroute"></div>
         <div class="incsub" id="incsub" style="display:none;">Add new</div>
         <div id="incoming"></div>
@@ -642,38 +653,47 @@
 
   function renderEnroute() {
     var rows = enrouteRows();
-    // Existing trailers sit above the blank rows, so the blank rows need a
-    // label saying they are for something new. With nothing on the way the
-    // blank rows are the whole card and the label would be noise.
+    // Existing trailers sit above the blank row, so the blank row needs a
+    // label saying it is for something new, and the table needs its header.
+    // With nothing on the way the blank row is the whole card.
     document.getElementById('incsub').style.display = rows.length ? 'block' : 'none';
+    document.getElementById('inchead').style.display = rows.length ? 'grid' : 'none';
     var h = document.getElementById('enroute');
     if (!rows.length) { h.innerHTML = ''; return; }
 
     h.innerHTML = rows.map(function (r) {
       var sp = etaSplit(r.eta);
+      var md = isoToMD(sp.date);
       // The comparison value, built the same way a submission is, so an
       // untouched row is recognisably untouched whatever the sheet's text.
-      var orig = etaJoin(sp.date, sp.time);
+      var orig = etaJoin(md, sp.time);
 
       var pend = (PENDTL || []).filter(function (t) {
         return t.was && (r.bol ? t.bol === r.bol
                                : String(t.was).toUpperCase() === String(r.tl).toUpperCase());
       }).pop();
 
-      var head = r.bol
-        ? '<div class="for erjump" data-bol="' + esc(r.bol) + '" title="Go to this shipment">' +
-          '<b>' + esc(r.nfc) + '</b> | ' + esc(r.bol) +
-          (r.delv ? ' &middot; DELV ' + esc(r.delv) : '') + '</div>'
+      // NFC number and delivery date identify the load; the BOL is on the
+      // card, one click away.
+      var load = r.bol
+        ? '<div class="for erjump" data-bol="' + esc(r.bol) + '" title="Go to ' +
+          esc(r.bol) + '"><b>' + esc(r.nfc) + '</b>' +
+          (r.delv ? ' &middot; ' + esc(r.delv) : '') + '</div>'
         : '<div class="for un">Unassigned</div>';
 
-      return '<div class="er" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
+      return '<div class="er' + (etaPastDue(md, sp.time) ? ' late' : '') +
+             '" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
-             head +
-             '<div class="inc"><input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
-             '<input class="ed" type="date" title="ETA date" value="' + esc(sp.date) + '">' +
-             '<input class="et2 hhmm" type="text" inputmode="numeric" maxlength="5" ' +
+             '<div class="ln">' + load +
+             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
+             '<div class="eta">' +
+             '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
+             'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
+             esc(md) + '">' +
+             '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
-             esc(sp.time) + '"></div>' +
+             esc(sp.time) + '">' +
+             '</div></div>' +
              (pend ? '<div class="pend">Received, pending confirmation: ' + esc(pend.tl) +
                      (pend.eta ? ' &middot; ' + esc(pend.eta) : '') + '</div>' : '') +
              '</div>';
@@ -734,9 +754,14 @@
     var hhmm = t ? t.replace(':', '') : '';
     if (!d) return hhmm;
 
-    var bits = d.split('-');          // yyyy-mm-dd from a date input
-    if (bits.length !== 3) return hhmm;
-    var md = bits[1] + '/' + bits[2];
+    // MM/DD as typed, or yyyy-mm-dd from a date input on a load card.
+    var md;
+    if (/^\d{2}\/\d{2}$/.test(d)) md = d;
+    else {
+      var bits = d.split('-');
+      if (bits.length !== 3) return hhmm;
+      md = bits[1] + '/' + bits[2];
+    }
     return hhmm ? hhmm + ' ' + md : md;
   }
 
@@ -761,8 +786,9 @@
 
   function incRow() {
     return '<div class="inc"><input class="tl" placeholder="Trailer #" title="Trailer #">' +
-           '<input class="ed" type="date" title="ETA date" value="' +
-           todayValue() + '">' +
+           '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
+           'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
+           todayMD() + '">' +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
            'oninput="onHHMM(this)"></div>';
@@ -808,6 +834,43 @@
   //
   // The colon appears on its own as they type, so "0600" becomes "06:00"
   // without anyone reaching for punctuation on a phone keypad.
+  // MM/DD, typed. The native date picker was the widest control in the row
+  // and a year nobody needs; this keeps the same no-prose guarantee in half
+  // the space. "918" -> "09/18" is read on submit, as "930" is for time.
+  function onMMDD(el) {
+    var d = String(el.value || '').replace(/[^\d]/g, '').slice(0, 4);
+    if (d.length >= 3) el.value = d.slice(0, 2) + '/' + d.slice(2);
+    else el.value = d;
+  }
+  function mmdd(v) {
+    var d = String(v || '').replace(/[^\d]/g, '');
+    if (d.length === 3) d = '0' + d;
+    if (d.length !== 4) return '';
+    var m = Number(d.slice(0, 2)), dd = Number(d.slice(2));
+    if (m < 1 || m > 12 || dd < 1 || dd > 31) return '';
+    return d.slice(0, 2) + '/' + d.slice(2);
+  }
+  function todayMD() {
+    var d = new Date();
+    return ('0' + (d.getMonth() + 1)).slice(-2) + '/' + ('0' + d.getDate()).slice(-2);
+  }
+  function isoToMD(v) {
+    var b = String(v || '').split('-');
+    return b.length === 3 ? b[1] + '/' + b[2] : '';
+  }
+  // An hour's grace: the ETA is in the yard's time and the clock here is the
+  // carrier's, which can be an hour apart. Flagging a trailer as late that is
+  // not yet late would teach them to ignore the red.
+  function etaPastDue(md, hm) {
+    if (!md || !hm) return false;
+    var now = new Date();
+    var due = new Date(now.getFullYear(), Number(md.slice(0, 2)) - 1,
+                       Number(md.slice(3)), Number(hm.slice(0, 2)), Number(hm.slice(3)));
+    // A December ETA read in January belongs to last year, not this one.
+    if (due - now > 180 * 864e5) due.setFullYear(due.getFullYear() - 1);
+    return now - due > 60 * 60000;
+  }
+
   function onHHMM(el) {
     var d = String(el.value || '').replace(/[^\d]/g, '').slice(0, 4);
     if (d.length >= 3) el.value = d.slice(0, 2) + ':' + d.slice(2);
@@ -1661,7 +1724,7 @@
       var oeta = r.getAttribute('data-oeta') || '';
       var bol  = r.getAttribute('data-bol') || '';
       var tl   = r.querySelector('.tl').value.trim();
-      var pd   = r.querySelector('.ed').value;
+      var pd   = mmdd(r.querySelector('.imd').value);
       var pt   = hhmm(r.querySelector('.et2').value);
       var eta  = etaJoin(pd, pt);
       if (tl === otl && eta === oeta) return;
@@ -1696,7 +1759,7 @@
       // A row is only a row once it names a trailer.
       if (!tl) return;
 
-      var pd = r.querySelector('.ed').value;
+      var pd = mmdd(r.querySelector('.imd').value);
       var pt = hhmm(r.querySelector('.et2').value);
       if ((pd && !pt) || (!pd && pt)) {
         problem = 'Incoming trailer ' + tl +
@@ -2114,7 +2177,8 @@
     // list has nowhere to go for them.
     document.getElementById('inccard').style.display = POOL ? 'block' : 'none';
 
-    document.getElementById('incoming').innerHTML = incRow() + incRow();
+    // One blank row. Most visits add nothing, and + Add another is right there.
+    document.getElementById('incoming').innerHTML = incRow();
     var old = document.getElementById('pendtl');
     if (old) old.parentNode.removeChild(old);
 
