@@ -234,6 +234,7 @@
   .inchead { font-size: 10.5px; text-transform: uppercase; color: #555;
              letter-spacing: .03em; padding: 2px 4px 4px;
              border-bottom: 1px solid #ddd; }
+  .inchead .hint, .incsub .hint { text-transform: none; color: #999; letter-spacing: 0; }
   .incsub { font-size: 10.5px; text-transform: uppercase; color: #555;
             letter-spacing: .03em; padding: 10px 0 5px; }
   .er { border-bottom: 1px solid #f0f0f0; padding: 1px 0; }
@@ -251,7 +252,7 @@
   .er input:hover { border-color: #d5dad7; }
   .er input:focus { border-color: #bfc5c2; background: #fff; }
   .er .eta input { flex: 1 1 50%; }
-  /* Past due, by the carrier's own clock with an hour's grace. */
+  /* Past due in the yard's time zone. Cleared as soon as they type. */
   .er.late .eta input { color: #c62828; font-weight: 700; }
   .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 4px 4px; }
   .inc input.tl  { flex: 1 1 50%; }
@@ -392,9 +393,9 @@
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
         <p class="note" id="incnote">Equipment heading in. Correct a number or ETA, or add new below.</p>
-        <div class="inchead" id="inchead" style="display:none;"><span>Load</span><span>Trailer</span><span>ETA</span></div>
+        <div class="inchead" id="inchead" style="display:none;"><span>Load</span><span>Trailer</span><span>ETA <span class="hint">24-hr</span></span></div>
         <div id="enroute"></div>
-        <div class="incsub" id="incsub" style="display:none;">Add new</div>
+        <div class="incsub" id="incsub">Add new <span class="hint">&middot; time in 24-hr, e.g. 14:30</span></div>
         <div id="incoming"></div>
         <button class="addbtn" onclick="addIncoming()">+ Add another</button>
       </div>
@@ -643,10 +644,12 @@
       if (enrouteAtYard(l.tl, l.eta)) return;
       var d = String(l.delv || '');
       d = d.length >= 10 ? d.slice(5).replace('-', '/') : d;
-      rows.push({ tl: l.tl, eta: l.eta || '', bol: l.bol, nfc: l.nfc, delv: d });
+      rows.push({ tl: l.tl, eta: l.eta || '', bol: l.bol, nfc: l.nfc, delv: d,
+                  due: l.etaDue || 0 });
     });
     (HELD || []).forEach(function (h) {
-      rows.push({ tl: h.tl, eta: h.eta || '', bol: '', nfc: '', delv: '' });
+      rows.push({ tl: h.tl, eta: h.eta || '', bol: '', nfc: '', delv: '',
+                  due: h.due || 0 });
     });
     return rows;
   }
@@ -656,7 +659,8 @@
     // Existing trailers sit above the blank row, so the blank row needs a
     // label saying it is for something new, and the table needs its header.
     // With nothing on the way the blank row is the whole card.
-    document.getElementById('incsub').style.display = rows.length ? 'block' : 'none';
+    // "Add new" always shows: it also carries the 24-hour hint, which the
+    // blank row needs whether or not anything is listed above it.
     document.getElementById('inchead').style.display = rows.length ? 'grid' : 'none';
     var h = document.getElementById('enroute');
     if (!rows.length) { h.innerHTML = ''; return; }
@@ -681,7 +685,7 @@
           (r.delv ? ' &middot; ' + esc(r.delv) : '') + '</div>'
         : '<div class="for un">Unassigned</div>';
 
-      return '<div class="er' + (etaPastDue(md, sp.time) ? ' late' : '') +
+      return '<div class="er' + (etaPastDue(r.due) ? ' late' : '') +
              '" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
@@ -699,6 +703,12 @@
              '</div>';
     }).join('');
   }
+
+  // Red means "this needs an answer". Once they are typing one, it has one.
+  document.addEventListener('input', function (ev) {
+    var er = ev.target && ev.target.closest ? ev.target.closest('.er') : null;
+    if (er) er.classList.remove('late');
+  });
 
   // The label on an assigned row goes to its load, like a row in the onsite
   // panel. Delegated for the same reason: the panel is rebuilt on refresh.
@@ -858,17 +868,13 @@
     var b = String(v || '').split('-');
     return b.length === 3 ? b[1] + '/' + b[2] : '';
   }
-  // An hour's grace: the ETA is in the yard's time and the clock here is the
-  // carrier's, which can be an hour apart. Flagging a trailer as late that is
-  // not yet late would teach them to ignore the red.
-  function etaPastDue(md, hm) {
-    if (!md || !hm) return false;
-    var now = new Date();
-    var due = new Date(now.getFullYear(), Number(md.slice(0, 2)) - 1,
-                       Number(md.slice(3)), Number(hm.slice(0, 2)), Number(hm.slice(3)));
-    // A December ETA read in January belongs to last year, not this one.
-    if (due - now > 180 * 864e5) due.setFullYear(due.getFullYear() - 1);
-    return now - due > 60 * 60000;
+  // Past due is decided by the server's instant, not this clock's reading of
+  // "07:00". The ETA is in the yard's time zone and the carrier may be in any
+  // other, so the page only compares an absolute time against now. Same grace
+  // as the ETA chase, sent with the board so the two cannot drift apart.
+  var ETA_GRACE_MIN = 30;
+  function etaPastDue(dueMs) {
+    return !!dueMs && Date.now() - dueMs > ETA_GRACE_MIN * 60000;
   }
 
   function onHHMM(el) {
@@ -1951,6 +1957,7 @@
     POOL    = !!p.pool;
     PENDTL  = p.pendingTrailers || [];
     HELD    = p.held || [];
+    if (p.etaGraceMin) ETA_GRACE_MIN = p.etaGraceMin;
     QUEUED  = p.queued || [];
 
     // SUBMISSIONS STILL AT THE EDGE.
