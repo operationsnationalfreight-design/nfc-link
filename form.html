@@ -224,6 +224,15 @@
   .tick { color: #2e7d32; font-weight: 700; }
 
   .inc { display: flex; gap: 8px; margin-bottom: 7px; }
+  /* En route rows: what the trailer is for on one line, the editable fields
+     under it, laid out exactly like an incoming row so the two panels read
+     as the same kind of entry. */
+  .er { padding: 8px 0 4px; border-bottom: 1px solid #eee; }
+  .er:last-child { border-bottom: 0; }
+  .er .for { font-size: 12px; padding-bottom: 5px; }
+  .er .for.erjump { cursor: pointer; }
+  .er .for.erjump b { border-bottom: 1px dotted #9aa7a0; }
+  .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 0 4px; }
   .inc input.tl  { flex: 1 1 38%; }
   .inc input.ed  { flex: 1 1 36%; }
   .inc input.et2 { flex: 1 1 26%; }
@@ -359,6 +368,12 @@
         </div>
       </div>
 
+      <div class="card" id="enroutecard" style="display:none;">
+        <h2>Trailers En Route</h2>
+        <p class="note">Equipment on its way to us. Change a trailer number or ETA here if it has changed.</p>
+        <div id="enroute"></div>
+      </div>
+
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
         <p class="note" id="incnote">Equipment heading in, with expected arrival.</p>
@@ -460,6 +475,7 @@
   var ONSITE  = [];
   var POOL    = false;
   var PENDTL  = [];
+  var HELD    = [];   // pool equipment on the way, from the carrier tab
   var INIT    = {};   // what each card was rendered with
 
   function esc(s) {
@@ -579,10 +595,94 @@
     h.innerHTML = t + '</table>';
   }
 
+  // TRAILERS EN ROUTE. Pool carriers only.
+  //
+  // Two kinds of row, one panel, because to the carrier they are the same
+  // thing: a trailer on its way whose number or ETA may have changed.
+  //   Assigned: a trailer we gave to one of their loads that has not arrived.
+  //     The load card hides trailer fields for a pool carrier unless they tick
+  //     the live box, and ticking it declares something else entirely, so
+  //     without this row a changed ETA had no honest place to go. Submits
+  //     against the BOL, landing on MASTER R and K like any card edit.
+  //   Unassigned: an entry in their tab's column K with an ETA. Submits
+  //     without a BOL, carrying the old number so promote rewrites that entry
+  //     instead of adding a second one.
+  // Live-load carriers edit on the load card itself, so they never see this.
+  function enrouteAtYard(tl, eta) {
+    var here = String(tl || '').trim().toUpperCase();
+    return /^AT ADC$/i.test(String(eta || '').trim()) ||
+           (!!here && (ONSITE || []).some(function (o) {
+             return String(o.tl || '').trim().toUpperCase() === here;
+           }));
+  }
+
+  function enrouteRows() {
+    if (!POOL) return [];
+    var rows = [];
+    (LOADS || []).forEach(function (l) {
+      if (!l.tl || l.gone || l.loaded || l.pendingTrailerClear) return;
+      if (enrouteAtYard(l.tl, l.eta)) return;
+      var d = String(l.delv || '');
+      d = d.length >= 10 ? d.slice(5).replace('-', '/') : d;
+      rows.push({ tl: l.tl, eta: l.eta || '', bol: l.bol, nfc: l.nfc, delv: d });
+    });
+    (HELD || []).forEach(function (h) {
+      rows.push({ tl: h.tl, eta: h.eta || '', bol: '', nfc: '', delv: '' });
+    });
+    return rows;
+  }
+
+  function renderEnroute() {
+    var rows = enrouteRows();
+    document.getElementById('enroutecard').style.display = rows.length ? 'block' : 'none';
+    var h = document.getElementById('enroute');
+    if (!rows.length) { h.innerHTML = ''; return; }
+
+    h.innerHTML = rows.map(function (r) {
+      var sp = etaSplit(r.eta);
+      // The comparison value, built the same way a submission is, so an
+      // untouched row is recognisably untouched whatever the sheet's text.
+      var orig = etaJoin(sp.date, sp.time);
+
+      var pend = (PENDTL || []).filter(function (t) {
+        return t.was && (r.bol ? t.bol === r.bol
+                               : String(t.was).toUpperCase() === String(r.tl).toUpperCase());
+      }).pop();
+
+      var head = r.bol
+        ? '<div class="for erjump" data-bol="' + esc(r.bol) + '" title="Go to this shipment">' +
+          '<b>' + esc(r.nfc) + '</b> | ' + esc(r.bol) +
+          (r.delv ? ' &middot; DELV ' + esc(r.delv) : '') + '</div>'
+        : '<div class="for" style="color:#999;">unassigned</div>';
+
+      return '<div class="er" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
+             '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
+             head +
+             '<div class="inc"><input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
+             '<input class="ed" type="date" title="ETA date" value="' + esc(sp.date) + '">' +
+             '<input class="et2 hhmm" type="text" inputmode="numeric" maxlength="5" ' +
+             'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
+             esc(sp.time) + '"></div>' +
+             (pend ? '<div class="pend">Received, pending confirmation: ' + esc(pend.tl) +
+                     (pend.eta ? ' &middot; ' + esc(pend.eta) : '') + '</div>' : '') +
+             '</div>';
+    }).join('');
+  }
+
+  // The label on an assigned row goes to its load, like a row in the onsite
+  // panel. Delegated for the same reason: the panel is rebuilt on refresh.
+  document.addEventListener('click', function (ev) {
+    var el = ev.target && ev.target.closest ? ev.target.closest('.erjump') : null;
+    if (el) goToLoad(el.getAttribute('data-bol'));
+  });
+
   // Trailers this carrier already reported that we have not processed yet.
   function renderPendingTrailers() {
-    if (!PENDTL.length) return;
-    var lines = PENDTL.map(function(t) {
+    // Edits made in the en-route panel show against their own row there, not
+    // here as if they were new equipment.
+    var list = PENDTL.filter(function (t) { return !t.was; });
+    if (!list.length) return;
+    var lines = list.map(function(t) {
       return esc(t.tl) + (t.eta ? ' &middot; ' + esc(t.eta) : '');
     }).join('<br>');
     document.getElementById('incoming').insertAdjacentHTML('beforebegin',
@@ -1540,6 +1640,37 @@
       }
     });
 
+    // En route edits. Only rows that changed are sent, compared against the
+    // values the row was drawn with, so looking at the panel and pressing
+    // Submit for something else does not resubmit every trailer on it.
+    if (POOL) document.querySelectorAll('#enroute .er').forEach(function(r) {
+      if (problem) return;
+      var otl  = r.getAttribute('data-otl') || '';
+      var oeta = r.getAttribute('data-oeta') || '';
+      var bol  = r.getAttribute('data-bol') || '';
+      var tl   = r.querySelector('.tl').value.trim();
+      var pd   = r.querySelector('.ed').value;
+      var pt   = hhmm(r.querySelector('.et2').value);
+      var eta  = etaJoin(pd, pt);
+      if (tl === otl && eta === oeta) return;
+
+      if (!tl) {
+        problem = 'Trailer ' + otl + ' needs a trailer number.';
+        return;
+      }
+      if ((pd && !pt) || (!pd && pt)) {
+        problem = 'Trailer ' + tl + ' needs both a date and a time for its ETA.';
+        return;
+      }
+      // The load card already sent this load's trailer: the card wins, since
+      // two rows for one BOL would leave the answer to timestamp order.
+      if (bol && p.incoming.some(function (x) { return x.bol === bol; })) return;
+
+      p.incoming.push(bol
+        ? { bol: bol, nfc: r.getAttribute('data-nfc') || '', tl: tl, eta: eta, was: otl }
+        : { tl: tl, eta: eta, was: otl });
+    });
+
     if (POOL) document.querySelectorAll('#incoming .inc').forEach(function(r) {
       var tl = r.querySelector('.tl').value.trim();
 
@@ -1744,6 +1875,7 @@
     ONSITE  = p.onsite  || [];
     POOL    = !!p.pool;
     PENDTL  = p.pendingTrailers || [];
+    HELD    = p.held || [];
     QUEUED  = p.queued || [];
 
     // SUBMISSIONS STILL AT THE EDGE.
@@ -1958,7 +2090,8 @@
       });
       // Incoming trailers land in the pending list the panel already renders.
       (d.incoming || []).forEach(function (t) {
-        if (t && t.tl) PENDTL.push({ tl: t.tl, eta: t.eta || "" });
+        if (t && t.tl) PENDTL.push({ tl: t.tl, eta: t.eta || "",
+                                     was: t.was || "", bol: t.bol || "" });
       });
     });
   }
@@ -1976,6 +2109,7 @@
     // Before the panels, since both their captions name the yards.
     renderSiteNotes();
     renderOnsite();
+    renderEnroute();
     renderPendingTrailers();
     renderLoads();
 
