@@ -828,7 +828,39 @@
   // or vanish while the payload still considered it live.
   var DELV_GRACE_HOURS = 3;
 
+  // The server sends delvDue, the instant of the last delivery in that stop's
+  // own time zone, with every load it builds. Only a provisional copy pushed
+  // before that existed lacks it, and for those the page works the instant
+  // out itself from the state on the stop, in that zone, never by the
+  // browser's own clock: "10:45, FARMINGDALE, NY" is 10:45 Eastern wherever
+  // the carrier is sitting.
+  var STATE_TZ = (function () {
+    var z = {};
+    'CT DC DE FL GA IN KY MA MD ME MI NC NH NJ NY OH PA RI SC VA VT WV'.split(' ')
+      .forEach(function (s) { z[s] = 'America/New_York'; });
+    'AZ CO ID MT NM UT WY'.split(' ').forEach(function (s) { z[s] = 'America/Denver'; });
+    'CA NV OR WA'.split(' ').forEach(function (s) { z[s] = 'America/Los_Angeles'; });
+    return z;
+  })();
+
+  // Wall-clock time in a zone -> absolute milliseconds.
+  function zonedMs(y, mo, d, h, mi, tz) {
+    var guess = Date.UTC(y, mo - 1, d, h, mi);
+    try {
+      var parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit',
+        day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(guess));
+      var g = {};
+      parts.forEach(function (p) { g[p.type] = +p.value; });
+      var asUtc = Date.UTC(g.year, g.month - 1, g.day, g.hour % 24, g.minute);
+      return guess - (asUtc - guess);
+    } catch (e) { return new Date(y, mo - 1, d, h, mi).getTime(); }
+  }
+
   function delvPassed(l) {
+    var grace = DELV_GRACE_HOURS * 3600000;
+    if (l && l.delvDue) return Date.now() > l.delvDue + grace;
+
     var stops = (l && l.stops) || [];
     var dels = stops.filter(function (s) { return /delivery/i.test(s.type || ''); });
     var last = dels.length ? dels[dels.length - 1] : null;
@@ -837,8 +869,9 @@
       var m = String(last.date).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
       var t = String(last.time).match(/^(\d{1,2}):(\d{2})$/);
       if (m && t) {
-        var due = new Date(+m[3], +m[1] - 1, +m[2], +t[1], +t[2]);
-        return Date.now() > due.getTime() + DELV_GRACE_HOURS * 3600000;
+        var st = String(last.city || '').toUpperCase().match(/,\s*([A-Z]{2})\b[^,]*$/);
+        var tz = (st && STATE_TZ[st[1]]) || 'America/Chicago';
+        return Date.now() > zonedMs(+m[3], +m[1], +m[2], +t[1], +t[2], tz) + grace;
       }
     }
 
@@ -849,23 +882,6 @@
     return dv < today;
   }
 
-  // 24 HOUR, TYPED, NOT PICKED.
-  //
-  // A native time input renders in whatever format the operating system is
-  // set to, and nothing in HTML overrides that, so half the carriers saw
-  // AM/PM and there was no way to ask for 24 hour. A plain text box always
-  // reads the same on every machine.
-  //
-  // The colon appears on its own as they type, so "0600" becomes "06:00"
-  // without anyone reaching for punctuation on a phone keypad.
-  // MM/DD, typed. The native date picker was the widest control in the row
-  // and a year nobody needs; this keeps the same no-prose guarantee in half
-  // the space. "918" -> "09/18" is read on submit, as "930" is for time.
-  function onMMDD(el) {
-    var d = String(el.value || '').replace(/[^\d]/g, '').slice(0, 4);
-    if (d.length >= 3) el.value = d.slice(0, 2) + '/' + d.slice(2);
-    else el.value = d;
-  }
   function mmdd(v) {
     var d = String(v || '').replace(/[^\d]/g, '');
     if (d.length === 3) d = '0' + d;
