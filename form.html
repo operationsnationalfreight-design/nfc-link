@@ -227,37 +227,40 @@
   /* En route rows: what the trailer is for on one line, the editable fields
      under it, laid out exactly like an incoming row so the two panels read
      as the same kind of entry. */
-  /* Trailers already on the way, one line each: LOAD | TRAILER | ETA.
-     The header and the rows share one grid so the columns line up. */
-  .inchead, .er .ln { display: grid; gap: 8px; align-items: center;
-                      grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.15fr); }
+  /* One grid for the whole card: header, trailers on the way, and new rows.
+     Every value sits under the heading that names it, so the 24-hr hint is
+     directly over the time it describes. */
+  .inchead, .er .ln, #incoming .inc {
+    display: grid; gap: 8px; align-items: center;
+    grid-template-columns: minmax(0,1.15fr) minmax(0,1fr) minmax(0,.62fr) minmax(0,.62fr); }
   .inchead { font-size: 10.5px; text-transform: uppercase; color: #555;
              letter-spacing: .03em; padding: 2px 4px 4px;
              border-bottom: 1px solid #ddd; }
-  .inchead .hint, .incsub .hint { text-transform: none; color: #999; letter-spacing: 0; }
-  .incsub { font-size: 10.5px; text-transform: uppercase; color: #555;
-            letter-spacing: .03em; padding: 10px 0 5px; }
-  .er { border-bottom: 1px solid #f0f0f0; padding: 1px 0; }
+  .inchead .hint { text-transform: none; color: #999; letter-spacing: 0; }
+  #incoming .inc { margin: 6px 0 0; }
+  #incoming .inc input { min-height: 34px; }
+  .inc .newlbl { font-size: 12px; color: #999; padding-left: 4px; }
+  .er { border-bottom: 1px solid #f0f0f0; padding: 1px 0;
+        border-left: 3px solid transparent; }
   .er .for { font-size: 12.5px; padding-left: 4px; white-space: nowrap;
              overflow: hidden; text-overflow: ellipsis; }
   .er .for.un { color: #999; }
   .er .for.erjump { cursor: pointer; }
   .er .for.erjump b { border-bottom: 1px dotted #9aa7a0; }
-  .er .eta { display: flex; gap: 4px; }
-  /* Reads as text until touched. The border appears on hover and stays while
-     editing, so the list is quiet but every value is still one click from
-     being changed. */
-  .er input { border-color: transparent; background: transparent;
+  /* Reads as text, with a faint underline saying it can be changed; hover
+     does not exist on a phone, so the underline has to say it alone. The
+     full box appears while editing. */
+  .er input { border-color: transparent; border-bottom: 1px dashed #c9cfcc;
+              border-radius: 0; background: transparent;
               padding: 5px 4px; min-height: 0; font-size: 13.5px; }
-  .er input:hover { border-color: #d5dad7; }
-  .er input:focus { border-color: #bfc5c2; background: #fff; }
-  .er .eta input { flex: 1 1 50%; }
+  .er input:hover { border-color: #d5dad7; border-radius: 3px; }
+  .er input:focus { border: 1px solid #bfc5c2; border-radius: 3px; background: #fff; }
   /* Past due in the yard's time zone. Cleared as soon as they type. */
-  .er.late .eta input { color: #c62828; font-weight: 700; }
+  .er.late input.imd, .er.late input.et2 { color: #c62828; font-weight: 700; }
+  /* Changed and not yet sent: the carrier can see what Submit will send. */
+  .er.dirty { border-left-color: #d4a017; background: #fffaf0; }
   .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 4px 4px; }
-  .inc input.tl  { flex: 1 1 50%; }
-  .inc input.imd { flex: 1 1 25%; }
-  .inc input.et2 { flex: 1 1 25%; }
+
   /* Date and time pickers render taller than a text input on some browsers,
      which left the row ragged. */
   .inc input { min-height: 38px; }
@@ -393,10 +396,9 @@
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
         <p class="note" id="incnote">Equipment heading in. Correct a number or ETA, or add new below.</p>
-        <div class="inchead" id="inchead" style="display:none;"><span>Load</span><span>Trailer</span><span>ETA <span class="hint">24-hr</span></span></div>
+        <div class="inchead" id="inchead"><span>Load</span><span>Trailer</span><span>ETA Date</span><span>Time <span class="hint">24-hr</span></span></div>
         <div id="enroute"></div>
-        <div class="incsub" id="incsub">Add new <span class="hint">&middot; time in 24-hr, e.g. 14:30</span></div>
-        <div id="incoming"></div>
+                <div id="incoming"></div>
         <button class="addbtn" onclick="addIncoming()">+ Add another</button>
       </div>
     </div>
@@ -656,12 +658,8 @@
 
   function renderEnroute() {
     var rows = enrouteRows();
-    // Existing trailers sit above the blank row, so the blank row needs a
-    // label saying it is for something new, and the table needs its header.
-    // With nothing on the way the blank row is the whole card.
-    // "Add new" always shows: it also carries the 24-hour hint, which the
-    // blank row needs whether or not anything is listed above it.
-    document.getElementById('inchead').style.display = rows.length ? 'grid' : 'none';
+    // The header always shows: the blank row sits in the same columns and
+    // needs the same headings, the 24-hr hint most of all.
     var h = document.getElementById('enroute');
     if (!rows.length) { h.innerHTML = ''; return; }
 
@@ -690,14 +688,13 @@
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
              '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
-             '<div class="eta">' +
              '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
              esc(md) + '">' +
              '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
              esc(sp.time) + '">' +
-             '</div></div>' +
+             '</div>' +
              (pend ? '<div class="pend">Received, pending confirmation: ' + esc(pend.tl) +
                      (pend.eta ? ' &middot; ' + esc(pend.eta) : '') + '</div>' : '') +
              '</div>';
@@ -705,9 +702,19 @@
   }
 
   // Red means "this needs an answer". Once they are typing one, it has one.
+  // And a changed row is marked, so what Submit will send is visible before
+  // it is sent. Compared the same way the submission is, so putting a value
+  // back unmarks the row.
   document.addEventListener('input', function (ev) {
     var er = ev.target && ev.target.closest ? ev.target.closest('.er') : null;
-    if (er) er.classList.remove('late');
+    if (!er) return;
+    er.classList.remove('late');
+    var tl  = er.querySelector('.tl').value.trim();
+    var eta = etaJoin(mmdd(er.querySelector('.imd').value),
+                      hhmm(er.querySelector('.et2').value));
+    er.classList.toggle('dirty',
+      tl !== (er.getAttribute('data-otl') || '') ||
+      eta !== (er.getAttribute('data-oeta') || ''));
   });
 
   // The label on an assigned row goes to its load, like a row in the onsite
@@ -726,8 +733,8 @@
     var lines = list.map(function(t) {
       return esc(t.tl) + (t.eta ? ' &middot; ' + esc(t.eta) : '');
     }).join('<br>');
-    // Above "Add new": these are already sent, not rows to fill in.
-    document.getElementById('incsub').insertAdjacentHTML('beforebegin',
+    // Above the blank rows: these are already sent, not rows to fill in.
+    document.getElementById('incoming').insertAdjacentHTML('beforebegin',
       '<p class="note" id="pendtl" style="color:#8a6d1f;font-weight:700;">' +
       'Received, pending confirmation:<br>' + lines + '</p>');
   }
@@ -795,7 +802,8 @@
   }
 
   function incRow() {
-    return '<div class="inc"><input class="tl" placeholder="Trailer #" title="Trailer #">' +
+    return '<div class="inc"><span class="newlbl">New</span>' +
+           '<input class="tl" placeholder="Trailer #" title="Trailer #">' +
            '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
            'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
            todayMD() + '">' +
