@@ -178,7 +178,8 @@
   .stops { font-size: 12.5px; color: #333; }
   .stops b { color: #0d3320; letter-spacing: .4px; }
   .stops .leg { padding: 1px 0 6px 8px; color: #333; }
-  .stops .leg .when { color: #666; font-size: 12.5px; padding-top: 1px; }
+  .stops .leg { color: #555; }
+  .stops .leg .when { color: #222; font-weight: 600; padding-bottom: 1px; }
 
   select, input { width: 100%; font-family: inherit; font-size: 14px; padding: 7px;
                   border: 1px solid #bfc5c2; border-radius: 3px; background: #fff; }
@@ -396,7 +397,7 @@
 
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
-        <p class="note" id="incnote">Equipment heading in.<br>Correct a number or ETA, or add new below.</p>
+        <p class="note" id="incnote">Equipment heading in.<br>Add incoming equipment below.</p>
         <div class="inchead" id="inchead"><span>Load</span><span>Trailer</span><span>ETA Date</span><span>Time <span class="hint">24-hr</span></span></div>
         <div id="enroute"></div>
                 <div id="incoming"></div>
@@ -556,10 +557,13 @@
                              : 'Your equipment currently tracked.';
     }
     if (inc) {
-      // One sentence per line.
+      // One sentence per line. The second only offers corrections when there
+      // is something listed to correct.
       inc.innerHTML = (where ? 'Equipment heading to ' + esc(where) + '.'
                              : 'Equipment heading in.') +
-                      '<br>Correct a number or ETA, or add new below.';
+                      '<br>' + (enrouteRows().length
+                                  ? 'Correct a number or ETA, or add new below.'
+                                  : 'Add incoming equipment below.');
     }
   }
 
@@ -937,12 +941,12 @@
   function stopHtml(s) {
     var out = '';
     s.forEach(function(x) {
-      // Site, then the appointment on its own line. Run together with a dot
-      // they wrapped wherever the card ran out of width, often splitting the
-      // date from its site.
+      // Appointment first, then the site, each on its own line. When is what
+      // a carrier plans around; where is the detail under it. Run together
+      // with a dot they wrapped wherever the card ran out of width.
       out += '<div><b>' + esc(x.type.toUpperCase()) + '</b></div>' +
-             '<div class="leg">' + esc(x.city) +
-             '<div class="when">' + esc(x.date) + ' ' + esc(x.time) + '</div></div>';
+             '<div class="leg"><div class="when">' + esc(x.date) + ' ' + esc(x.time) +
+             '</div>' + esc(x.city) + '</div>';
     });
     return out;
   }
