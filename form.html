@@ -178,6 +178,7 @@
   .stops { font-size: 12.5px; color: #333; }
   .stops b { color: #0d3320; letter-spacing: .4px; }
   .stops .leg { padding: 1px 0 6px 8px; color: #333; }
+  .stops .leg .when { color: #666; font-size: 12.5px; padding-top: 1px; }
 
   select, input { width: 100%; font-family: inherit; font-size: 14px; padding: 7px;
                   border: 1px solid #bfc5c2; border-radius: 3px; background: #fff; }
@@ -395,7 +396,7 @@
 
       <div class="card" id="inccard" style="display:none;">
         <h2>Incoming Trailers</h2>
-        <p class="note" id="incnote">Equipment heading in. Correct a number or ETA, or add new below.</p>
+        <p class="note" id="incnote">Equipment heading in.<br>Correct a number or ETA, or add new below.</p>
         <div class="inchead" id="inchead"><span>Load</span><span>Trailer</span><span>ETA Date</span><span>Time <span class="hint">24-hr</span></span></div>
         <div id="enroute"></div>
                 <div id="incoming"></div>
@@ -555,9 +556,10 @@
                              : 'Your equipment currently tracked.';
     }
     if (inc) {
-      inc.textContent = where
-        ? 'Equipment heading to ' + where + '. Correct a number or ETA, or add new below.'
-        : 'Equipment heading in. Correct a number or ETA, or add new below.';
+      // One sentence per line.
+      inc.innerHTML = (where ? 'Equipment heading to ' + esc(where) + '.'
+                             : 'Equipment heading in.') +
+                      '<br>Correct a number or ETA, or add new below.';
     }
   }
 
@@ -935,9 +937,12 @@
   function stopHtml(s) {
     var out = '';
     s.forEach(function(x) {
+      // Site, then the appointment on its own line. Run together with a dot
+      // they wrapped wherever the card ran out of width, often splitting the
+      // date from its site.
       out += '<div><b>' + esc(x.type.toUpperCase()) + '</b></div>' +
-             '<div class="leg">' + esc(x.city) + ' &middot; ' +
-             esc(x.date) + ' ' + esc(x.time) + '</div>';
+             '<div class="leg">' + esc(x.city) +
+             '<div class="when">' + esc(x.date) + ' ' + esc(x.time) + '</div></div>';
     });
     return out;
   }
