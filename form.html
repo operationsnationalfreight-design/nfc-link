@@ -1504,6 +1504,13 @@
     fieldsLocked(i, false);
   }
 
+  // The server sends CDL numbers masked, last four only ("****6506"). A field
+  // still showing the mask is unchanged and goes back empty, which the server
+  // reads as "keep what is on file". Anything typed over it is sent as typed.
+  function unmask(v) {
+    return /^\*{2,}\s*[A-Za-z0-9]{0,4}$/.test(String(v || '').trim()) ? '' : v;
+  }
+
   // Everything the carrier changed about this driver, or null.
   function editFrom(i) {
     var who = EDITING[i];
@@ -1526,7 +1533,7 @@
     });
     if (clash) return { clash: name };
 
-    return { was: who, name: name, mobile: mob, dl: dl, tk: tk };
+    return { was: who, name: name, mobile: mob, dl: unmask(dl), tk: tk };
   }
 
   function onDrv(sel) {
@@ -1700,7 +1707,7 @@
                       (dl !== inputNorm(init.dl)) ||
                       (tk !== inputNorm(init.tk));
         if (touched && !seenEdit[val]) {
-          p.driverEdits.push({ name: val, mobile: m, dl: dl, tk: tk });
+          p.driverEdits.push({ name: val, mobile: m, dl: unmask(dl), tk: tk });
           seenEdit[val] = true;
         }
       }
