@@ -1178,12 +1178,14 @@
         html += '<div></div></div></div>';
 
         html += '<div class="newbox" id="nb' + i + '">' +
-                '<div class="row2"><div><label>Full name</label>' +
-                '<input class="nn" data-i="' + i + '"></div>' +
-                '<div><label>Mobile</label><input class="nm" data-i="' + i + '"></div></div>' +
-                '<div class="row2"><div><label>CDL #</label>' +
-                '<input class="nd" data-i="' + i + '"></div>' +
-                '<div><label>Truck #</label><input class="nt" data-i="' + i + '"></div></div></div>';
+                '<div class="row2"><div><label>First name</label>' +
+                '<input class="nnf" data-i="' + i + '" autocomplete="off"></div>' +
+                '<div><label>Last name</label>' +
+                '<input class="nnl" data-i="' + i + '" autocomplete="off"></div></div>' +
+                '<div class="row2"><div><label>Mobile</label><input class="nm" data-i="' + i + '"></div>' +
+                '<div><label>CDL #</label><input class="nd" data-i="' + i + '"></div></div>' +
+                '<div class="row2"><div><label>Truck #</label><input class="nt" data-i="' + i + '"></div>' +
+                '<div></div></div></div>';
 
         // Trailer and ETA belong to the LOAD, not the driver, so they sit
         // outside the driver panel. Inside it they vanished the moment someone
@@ -1584,6 +1586,15 @@
     return el ? el.value.trim() : '';
   }
 
+  // A new driver's name, first and last together as one string, which is how
+  // it is stored everywhere else. Carriers were entering first names only,
+  // which leaves nothing to tell two Mikes apart at the gate. Both fields are
+  // required; spacing is tidied so "John  " + " Smith" reads "John Smith".
+  function newName(i) {
+    var f = v('nnf', i).replace(/\s+/g, ' '), l = v('nnl', i).replace(/\s+/g, ' ');
+    return (f && l) ? f + ' ' + l : '';
+  }
+
   function submitForm() {
     var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [],
               removeDrivers: [], removeTrailers: [] };
@@ -1615,7 +1626,7 @@
       if (isReturn(ld)) return;
 
       var sl = document.querySelector('.drv[data-i="' + k + '"]');
-      var name = sl ? (sl.value === '__NEW__' ? v('nn', k) : sl.value)
+      var name = sl ? (sl.value === '__NEW__' ? newName(k) : sl.value)
                     : (ld.pendingDriver || ld.driver);
       if (!name || !ld.delv) return;
       var key = name + '|' + ld.delv;
@@ -1629,7 +1640,7 @@
       var val = sel ? sel.value : '';
 
       // Same day, same driver, two loads. Returns are exempt, above.
-      var who = (val === '__NEW__') ? v('nn', i) : val;
+      var who = (val === '__NEW__') ? newName(i) : val;
       if (who && l.delv && !isReturn(l)) {
         var clash = dayOf[who + '|' + l.delv] || [];
         if (clash.length > 1) {
@@ -1641,8 +1652,11 @@
       }
 
       if (val === '__NEW__') {
-        var n = v('nn', i);
-        if (!n) { problem = 'Enter a name for the new driver on ' + l.nfc + '.'; return; }
+        var n = newName(i);
+        if (!n) {
+          problem = 'Enter the new driver\'s first and last name on ' + l.nfc + '.';
+          return;
+        }
 
         // A driver is not usable to us without all three. The mobile is how we
         // and the shipper reach them, the CDL is what the guard gate checks,
