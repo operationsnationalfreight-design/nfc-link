@@ -124,6 +124,14 @@
      otherwise we supply the trailer and nothing shows. Live-load carrier:
      trailer + ETA always, with an "Already on site" tick that swaps the ETA
      for current SCAC and empty drop. */
+  /* What the Loads card asks of this carrier, set per carrier type in
+     renderAll. Boxed so it reads as instructions, not a caption. */
+  .loadsnote { margin: 4px 0 12px; padding: 9px 12px; font-size: 13px;
+               line-height: 1.45; color: #1f2a24; background: #f1f6f3;
+               border: 1px solid #d3e0d8; border-left: 4px solid #0d3320;
+               border-radius: 3px; }
+  .loadsnote b { display: block; font-size: 13.5px; color: #0d3320;
+                 margin-bottom: 2px; }
   .tf { display: none; }
   .tchoice[data-mode="live"] .tf-tl, .tchoice[data-mode="live"] .tf-eta,
   .tchoice[data-mode="coming"] .tf-tl, .tchoice[data-mode="coming"] .tf-eta,
@@ -453,7 +461,7 @@
     <div class="col">
       <div class="card">
         <h2>Loads</h2>
-        <p class="note">Assign or confirm the driver for each load.</p>
+        <div class="loadsnote" id="loadsnote">Assign or confirm the driver for each load.</div>
         <div id="loads">
           <div class="dbar first" style="opacity:.45;">&nbsp;</div>
           <div class="load"><div class="skel w45" style="margin:2px auto 10px;"></div>
@@ -2446,6 +2454,15 @@
     // Live-load carriers report equipment on the shipment card, so a pool
     // list has nowhere to go for them.
     document.getElementById('inccard').style.display = POOL ? 'block' : 'none';
+
+    // What the Loads card asks. Live-load carriers supply every trailer, so
+    // both halves are required and both stay editable until the load loads.
+    document.getElementById('loadsnote').innerHTML = POOL
+      ? '<b>Assign or confirm the driver for each load.</b>' +
+        'Bringing your own trailer for a load? Tick Live load on that load.'
+      : '<b>Driver and trailer are required on every load.</b>' +
+        'You can update the driver, trailer or ETA here any time before the load is loaded. ' +
+        'Trailer already in our yard? Tick Already on site.';
 
     // One blank row. Most visits add nothing, and + Add another is right there.
     document.getElementById('incoming').innerHTML = incRow();
