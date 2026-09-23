@@ -119,6 +119,61 @@
   .livefields { display: none; }
   .livefields.on { display: block; }
 
+  /* THE TRAILER CHOICE ON A LOAD CARD.
+     Three answers (two for a live-load carrier), and only the chosen one's
+     fields on screen. Nothing chosen, nothing shown: most visits are about a
+     driver, and a card full of empty trailer boxes reads as a demand. */
+  .tseg { display: flex; margin: 2px 0 4px; border: 1px solid #bfc5c2;
+          border-radius: 3px; overflow: hidden; }
+  .tseg label { flex: 1 1 0; margin: 0; padding: 7px 4px; cursor: pointer;
+                text-transform: none; letter-spacing: 0; font-size: 12px;
+                font-weight: 600; color: #444; text-align: center;
+                background: #fff; border-left: 1px solid #bfc5c2;
+                white-space: normal; overflow: visible; line-height: 1.25; }
+  .tseg label:first-child { border-left: 0; }
+  .tseg label.on { background: #0d3320; color: #fff; }
+  .tseg input { position: absolute; opacity: 0; width: 1px; height: 1px;
+                margin: 0; padding: 0; }
+  .tf { display: none; }
+  .tchoice[data-mode="live"] .tf-tl, .tchoice[data-mode="live"] .tf-eta,
+  .tchoice[data-mode="coming"] .tf-tl, .tchoice[data-mode="coming"] .tf-eta,
+  .tchoice[data-mode="onsite"] .tf-tl, .tchoice[data-mode="onsite"] .tf-os {
+    display: block; }
+  .tchoice .opt { text-transform: none; font-weight: normal; color: #999;
+                  letter-spacing: 0; }
+  .bobbox { display: flex; align-items: center; gap: 6px; margin: 7px 0 0;
+            cursor: pointer; text-transform: none; letter-spacing: 0;
+            font-size: 13px; font-weight: normal; color: #444; }
+  .bobbox input { width: auto; margin: 0; }
+  input:disabled { background: #f0f2f1; color: #999; }
+
+  /* HYBRID DATE: a typed MM/DD box with a calendar button beside it. The
+     button opens the browser's own date picker, which writes MM/DD back into
+     the box, so typing and picking land in the same field. */
+  .dh { display: flex; align-items: stretch; min-width: 0; position: relative; }
+  .dh input.mdx { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0;
+                  border-bottom-right-radius: 0; }
+  .dh .cal { flex: 0 0 30px; display: flex; align-items: center;
+             justify-content: center; padding: 0; cursor: pointer;
+             border: 1px solid #bfc5c2; border-left: 0; background: #f6f8f7;
+             border-radius: 0 3px 3px 0; color: #0d3320; }
+  .dh .cal:hover { background: #e8eeea; }
+  .dh .calpick { position: absolute; left: 0; bottom: 0; width: 1px;
+                 height: 1px !important; min-height: 0 !important; opacity: 0;
+                 border: 0; padding: 0; pointer-events: none; }
+  .er .dh .cal { border-color: transparent; background: transparent; }
+  .er .dh .cal:hover { background: #eef2ef; }
+
+  /* Incoming row: "Already on site" replaces the ETA with the words. */
+  .osl { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer;
+         text-transform: none; letter-spacing: 0; font-size: 11.5px;
+         font-weight: normal; color: #555; white-space: normal; line-height: 1.2; }
+  .osl input { width: auto; margin: 0; min-height: 0 !important; flex: 0 0 auto; }
+  .ostxt { display: none; grid-column: span 2; padding-left: 4px;
+           font-size: 13px; font-weight: 700; color: #2e7d32; }
+  .inc.os .dh, .inc.os .et2 { display: none; }
+  .inc.os .ostxt { display: block; }
+
   /* A shipment from a rate confirmation that has not reached our board yet
      renders exactly like any other. Where it sits in OUR system is our
      problem: the carrier does the same thing either way, and the only
@@ -206,7 +261,7 @@
      wrapped onto two lines with empty space beside each. The basis values set
      the ratio; this sets whether they are allowed to honour it. */
   .etarow input { min-height: 38px; min-width: 0; }
-  .etarow input.letad { flex: 3 1 120px; }
+  .etarow .dh { flex: 3 1 120px; }
   .etarow input.letat { flex: 2 1 84px; }
   .dfields { display: none; }
   .dfields.on { display: block; }
@@ -694,15 +749,13 @@
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
              '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
-             '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
-             'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
-             esc(md) + '">' +
+             dateBox('imd', '', md) +
              '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
              esc(sp.time) + '">' +
              '</div>' +
              (pend ? '<div class="pend">Received, pending confirmation: ' + esc(pend.tl) +
-                     (pend.eta ? ' &middot; ' + esc(pend.eta) : '') + '</div>' : '') +
+                     (pend.eta ? ' &middot; ' + esc(etaShow(pend.eta)) : '') + '</div>' : '') +
              '</div>';
     }).join('');
   }
@@ -737,7 +790,7 @@
     var list = PENDTL.filter(function (t) { return !t.was; });
     if (!list.length) return;
     var lines = list.map(function(t) {
-      return esc(t.tl) + (t.eta ? ' &middot; ' + esc(t.eta) : '');
+      return esc(t.tl) + (t.eta ? ' &middot; ' + esc(etaShow(t.eta)) : '');
     }).join('<br>');
     // Above the blank rows: these are already sent, not rows to fill in.
     document.getElementById('incoming').insertAdjacentHTML('beforebegin',
@@ -807,15 +860,85 @@
     return out;
   }
 
+  // BLANK, NOT TODAY. A prefilled date let a trailer go in with a date the
+  // carrier never chose, and the ETA is now required whenever a trailer is
+  // named, so the default would have satisfied the rule on its own.
+  //
+  // "Already on site" replaces the ETA with the words: the trailer is in the
+  // yard under the carrier's own SCAC and we ask ADC to move it to NFCJ.
   function incRow() {
-    return '<div class="inc"><span class="newlbl">New</span>' +
+    return '<div class="inc">' +
+           '<label class="osl"><input type="checkbox" class="ios" ' +
+           'onchange="onIncOnsite(this)">Already on site</label>' +
            '<input class="tl" placeholder="Trailer #" title="Trailer #">' +
-           '<input class="imd" type="text" inputmode="numeric" maxlength="5" ' +
-           'placeholder="MM/DD" title="ETA date" oninput="onMMDD(this)" value="' +
-           todayMD() + '">' +
+           dateBox('imd', '', '') +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
-           'oninput="onHHMM(this)"></div>';
+           'oninput="onHHMM(this)"><span class="ostxt">on site</span></div>';
+  }
+  function onIncOnsite(box) {
+    var row = box.closest('.inc');
+    row.classList.toggle('os', box.checked);
+    if (box.checked) {
+      row.querySelector('.imd').value = '';
+      row.querySelector('.et2').value = '';
+    }
+  }
+
+  // ---- Hybrid date: typed MM/DD plus the native picker behind an icon.
+  var CAL_SVG = '<svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">' +
+    '<rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" ' +
+    'stroke="currentColor" stroke-width="1.4" fill="none"/></svg>';
+  function dateBox(cls, attrs, md) {
+    return '<span class="dh"><input class="' + cls + ' mdx" type="text" ' +
+           'inputmode="numeric" maxlength="5" placeholder="MM/DD" title="ETA date" ' +
+           'oninput="onMMDD(this)"' + (attrs || '') + ' value="' + esc(md || '') + '">' +
+           '<button type="button" class="cal" tabindex="-1" title="Pick a date" ' +
+           'onclick="openCal(this)">' + CAL_SVG + '</button>' +
+           '<input type="date" class="calpick" tabindex="-1" aria-hidden="true" ' +
+           'onchange="calPicked(this)"></span>';
+  }
+  // Referenced by every MM/DD box and never defined until now, so typing
+  // threw quietly and the slash never appeared. Digits in, MM/DD out.
+  // A first digit of 2 to 9 can only be a month on its own, so "924" is
+  // 09/24 as it is typed, not 92/4.
+  function onMMDD(el) {
+    var d = String(el.value || '').replace(/[^\d]/g, '');
+    if (d && d.charAt(0) > '1') d = '0' + d;
+    d = d.slice(0, 4);
+    el.value = d.length >= 3 ? d.slice(0, 2) + '/' + d.slice(2) : d;
+  }
+  // MM/DD -> yyyy-mm-dd for the picker, in whichever year puts it nearest
+  // today, so 01/03 picked on 30 December opens next January.
+  function mdToIso(md) {
+    var m = String(md || '').match(/^(\d{2})\/(\d{2})$/);
+    if (!m) return '';
+    var now = new Date(), best = null;
+    [0, 1, -1].forEach(function (k) {
+      var d = new Date(now.getFullYear() + k, +m[1] - 1, +m[2]);
+      if (!best || Math.abs(d - now) < Math.abs(best - now)) best = d;
+    });
+    return best.getFullYear() + '-' + m[1] + '-' + m[2];
+  }
+  function openCal(btn) {
+    var box = btn.parentNode;
+    var txt = box.querySelector('.mdx'), pick = box.querySelector('.calpick');
+    pick.value = mdToIso(mmdd(txt.value)) || todayValue();
+    try { if (pick.showPicker) { pick.showPicker(); return; } } catch (e) {}
+    pick.style.pointerEvents = 'auto'; pick.focus(); pick.click();
+    pick.style.pointerEvents = '';
+  }
+  function calPicked(pick) {
+    var txt = pick.parentNode.querySelector('.mdx');
+    txt.value = isoToMD(pick.value);
+    txt.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  // ETA as shown to the carrier. ON SITE is our marker, "on site" is English.
+  function etaShow(e) { return /^ON SITE$/i.test(String(e || '').trim()) ? 'on site' : e; }
+  function etaWords(e) {
+    e = String(e || '').trim();
+    return /^ON SITE$/i.test(e) ? ' on site' : e ? ' arriving ' + e : '';
   }
   function addIncoming() {
     document.getElementById('incoming').insertAdjacentHTML('beforeend', incRow());
@@ -1209,49 +1332,54 @@
         // in, so the question does not apply, and ticking it would put the
         // load on CF.INBOX as a LIVE TRAILER for equipment that is under the
         // freight.
-        if (POOL && !isReturn(l) &&
-            (l.live || (!l.tl && !l.loaded && !l.gone))) {
-          html += '<label class="livebox">' +
-                  '<input type="checkbox" class="live" data-i="' + i + '"' +
-                  (l.live ? ' checked' : '') + ' onchange="onLive(this)">' +
-                  'Live load trailer</label>';
-        }
-
-        // The wrapper is always emitted. For a pool carrier it is hidden
-        // until the box is ticked; for a live-load carrier it has no class and
-        // is simply visible.
+        // THE TRAILER, AS ONE OF THREE ANSWERS.
         //
-        // HIDDEN, not absent, when the trailer is already in the yard.
+        // Live load: the driver arrives with the trailer attached and waits
+        // while it loads. Trailer coming: a trailer dropped ahead of pickup.
+        // Already on site: the trailer is in the yard under the carrier's own
+        // SCAC, and we ask ADC to change it to NFCJ; the empty the driver
+        // drops in exchange is asked for, or Bobtail. A live-load carrier
+        // brings every trailer, so they get the last two only.
         //
-        // Asking for an ETA on a trailer that has arrived invites an answer
-        // that overwrites a known arrival with a guess, so the fields are out
-        // of the way by default. They still exist in the page, because a load
-        // that has not been picked up yet can still change: a driver calls in
-        // sick, a trailer gets swapped. Clear puts them back.
-        {
-          html += '<div class="' + (POOL ? 'livefields' + (l.live ? ' on' : '')
-                                         : '') + '" data-live="' + i + '"' +
+        // Offered only while the choice is open. A pool load with a trailer
+        // already assigned, anything loaded or rolling, and a pool return
+        // (already on a trailer heading in) keep their decision.
+        var tcOpen = !l.loaded && !l.gone &&
+                     (POOL ? (!isReturn(l) && (l.live || !l.tl)) : true);
+        if (tcOpen) {
+          var mode = l.live ? 'live' : (!POOL && l.tl ? 'coming' : '');
+          var opts = (POOL ? [['live', 'Live load']] : [])
+                       .concat([['coming', 'Trailer coming'], ['onsite', 'Already on site']]);
+          var sp0 = etaSplit(l.eta);
+          html += '<div class="tchoice" data-live="' + i + '" data-i="' + i +
+                  '" data-mode="' + mode + '"' +
                   (atYard ? ' style="display:none;"' : '') + '>' +
-                  // Trailer on its own line, ETA underneath.
-                  //
-                  // Three controls were sharing one row inside the
-                  // narrow half of a split card. They also arrive at
-                  // different times: a live-load carrier often knows
-                  // the trailer now and the ETA later, or the other way
-                  // round, so pairing them in one cramped row made the
-                  // one being filled in the harder one to hit.
-                  '<div><label>Trailer</label>' +
-                  '<input class="ltl" data-i="' + i + '" value="' +
-                  esc(POOL && !l.live ? '' : l.tl) + '"></div>' +
-                  '<div><label>ETA to shipper</label>' +
+                  '<label>Trailer</label><div class="tseg">' +
+                  opts.map(function (o) {
+                    return '<label class="' + (mode === o[0] ? 'on' : '') + '">' +
+                           '<input type="radio" name="tc' + i + '" class="tc" data-i="' + i +
+                           '" value="' + o[0] + '"' + (mode === o[0] ? ' checked' : '') +
+                           ' onchange="onTChoice(this)">' + o[1] + '</label>';
+                  }).join('') + '</div>' +
+                  '<div class="tf tf-tl"><label class="tll">Trailer #</label>' +
+                  '<input class="ltl" data-i="' + i + '" autocomplete="off" value="' +
+                  esc(mode ? l.tl : '') + '"></div>' +
+                  '<div class="tf tf-eta"><label>ETA to shipper</label>' +
                   '<div class="etarow">' +
-                  '<input class="letad" type="date" data-i="' + i +
-                  '" value="' + esc(etaSplit(l.eta).date || todayValue()) + '">' +
+                  dateBox('letad', ' data-i="' + i + '"', isoToMD(sp0.date)) +
                   '<input class="letat hhmm" type="text" inputmode="numeric" ' +
                   'maxlength="5" placeholder="HH:MM" oninput="onHHMM(this)" ' +
-                  'data-i="' + i +
-                  '" value="' + esc(etaSplit(l.eta).time) + '">' +
-                  '</div></div></div>';
+                  'data-i="' + i + '" value="' + esc(sp0.time) + '">' +
+                  '</div></div>' +
+                  '<div class="tf tf-os">' +
+                  '<label>Current SCAC <span class="opt">optional</span></label>' +
+                  '<input class="lcs" data-i="' + i + '" maxlength="4" autocomplete="off" ' +
+                  'style="text-transform:uppercase">' +
+                  '<label>Empty being dropped</label>' +
+                  '<input class="lemp" data-i="' + i + '" autocomplete="off">' +
+                  '<label class="bobbox"><input type="checkbox" class="lbob" data-i="' + i +
+                  '" onchange="onBobtail(this)">Bobtail</label>' +
+                  '</div></div>';
         }
 
         // Clear, on anything not yet loaded or gone.
@@ -1449,20 +1577,26 @@
       if (el) el.value = '';
     });
 
-    var d = document.querySelector('.letad[data-i="' + i + '"]');
-    if (d) d.value = todayValue();
   }
 
-  function onLive(box) {
-    var i = box.getAttribute('data-i');
-    var wrap = document.querySelector('.livefields[data-live="' + i + '"]');
-    if (!wrap) return;
-    wrap.className = 'livefields' + (box.checked ? ' on' : '');
-    if (!box.checked) {
-      var tl = document.querySelector('.ltl[data-i="' + i + '"]');
-      if (tl) tl.value = '';
-    }
+  function onTChoice(r) {
+    var i = r.getAttribute('data-i');
+    var box = document.querySelector('.tchoice[data-i="' + i + '"]');
+    if (!box) return;
+    box.setAttribute('data-mode', r.value);
+    [].forEach.call(box.querySelectorAll('.tseg label'), function (lb) {
+      lb.classList.toggle('on', lb.contains(r));
+    });
+    var ll = box.querySelector('.tll');
+    if (ll) ll.textContent = r.value === 'onsite' ? 'Trailer on site' : 'Trailer #';
     TOUCHED = true;
+  }
+  // Bobtail: the driver drops nothing, so the empty box is cleared and shut.
+  function onBobtail(b) {
+    var e = document.querySelector('.lemp[data-i="' + b.getAttribute('data-i') + '"]');
+    if (!e) return;
+    if (b.checked) e.value = '';
+    e.disabled = b.checked;
   }
 
   // Pending renames, keyed old name -> new name. Applied to the list on the
@@ -1635,6 +1769,9 @@
     });
 
     LOADS.forEach(function(l, i) {
+      // First problem wins, so the message names the top card that needs
+      // fixing rather than whichever bad card happened to come last.
+      if (problem) return;
       // Departed loads are submittable now; they land as pending for review.
       var sel = document.querySelector('.drv[data-i="' + i + '"]');
       var val = sel ? sel.value : '';
@@ -1743,31 +1880,43 @@
         // date and no time, and refused to submit over a control the carrier
         // cannot see. Nothing on screen explained it and nothing they could do
         // would clear it.
-        var wrap = document.querySelector('[data-live="' + i + '"]');
-        if (wrap && wrap.style.display === 'none') return;
+        var wrap = document.querySelector('.tchoice[data-i="' + i + '"]');
+        if (!wrap || wrap.style.display === 'none') return;
+        var mode = wrap.getAttribute('data-mode') || '';
+        if (!mode) return;                       // nothing chosen, nothing sent
 
         var base = INIT[i] || { ltl: '', leta: '' };
         var t  = v('ltl', i);
-        var liveBox = document.querySelector('.live[data-i="' + i + '"]');
-        var isLive = POOL ? !!(liveBox && liveBox.checked) : false;
 
-        // A pool carrier only reports a trailer when they have said they are
-        // bringing one. Without that check an untouched card would submit the
-        // trailer we assigned them back to us as though they had chosen it.
-        if (POOL && !isLive) return;
-        var ed = v('letad', i), et = hhmm(v('letat', i));
+        // Already on site: trailer and the empty are required, SCAC is not.
+        if (mode === 'onsite') {
+          if (!t) { problem = 'Enter the trailer already on site for ' + l.nfc + '.'; return; }
+          var bob = document.querySelector('.lbob[data-i="' + i + '"]');
+          var bobtail = !!(bob && bob.checked);
+          var emp = v('lemp', i);
+          if (!bobtail && !emp) {
+            problem = 'Enter the empty being dropped for ' + l.nfc + ', or tick Bobtail.';
+            return;
+          }
+          p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: 'ON SITE', onsite: true,
+                            cur: v('lcs', i).toUpperCase(),
+                            empty: bobtail ? 'bobtail' : emp });
+          return;
+        }
 
-        // Both or neither, but only once a trailer is named.
-        //
-        // The date defaults to today, so a card nobody has touched carries a
-        // date and nothing else. Demanding a time for that blocked submitting
-        // a driver on any load where no trailer was being reported, which is
-        // most of them.
-        if (t && ((ed && !et) || (!ed && et))) {
+        var isLive = mode === 'live';
+        var ed = mmdd(v('letad', i)), et = hhmm(v('letat', i));
+
+        // A named trailer needs its ETA: the date first, then the time.
+        if (t && !ed) {
+          problem = 'Enter the ETA date for trailer ' + t + ' on ' + l.nfc + '.';
+          return;
+        }
+        if (t && !et) {
           problem = 'Trailer ETA on ' + l.nfc + ' needs both a date and a time.';
           return;
         }
-        // No trailer means no ETA to report, whatever the pickers say.
+        if (!t && !base.ltl) return;
         var te = t ? etaJoin(ed, et) : '';
         // If what was on the sheet could not be parsed into the pickers,
         // an empty pair means "we could not show it", not "clear it". Treating
@@ -1776,7 +1925,7 @@
                           !etaSplit(base.leta).time;
         var etaChanged = te !== inputNorm(base.leta) && !(etaUnparsed && !te);
 
-        if (t !== inputNorm(base.ltl) || etaChanged) {
+        if (t !== inputNorm(base.ltl) || etaChanged || (isLive && !l.live)) {
           p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: te, live: isLive });
         }
       }
@@ -1800,7 +1949,12 @@
         problem = 'Trailer ' + otl + ' needs a trailer number.';
         return;
       }
-      if ((pd && !pt) || (!pd && pt)) {
+      if (!pd) {
+        var rn = r.getAttribute('data-nfc') || '';
+        problem = 'Enter the ETA date for trailer ' + tl + (rn ? ' on ' + rn : '') + '.';
+        return;
+      }
+      if (!pt) {
         problem = 'Trailer ' + tl + ' needs both a date and a time for its ETA.';
         return;
       }
@@ -1826,9 +1980,20 @@
       // A row is only a row once it names a trailer.
       if (!tl) return;
 
+      // On site: no ETA, and no SCAC asked here. The pool entry reads
+      // "12345 - SCAC SWAP" until the yard moves it to NFCJ.
+      var os = r.querySelector('.ios');
+      if (os && os.checked) {
+        p.incoming.push({ tl: tl, eta: 'ON SITE', onsite: true });
+        return;
+      }
       var pd = mmdd(r.querySelector('.imd').value);
       var pt = hhmm(r.querySelector('.et2').value);
-      if ((pd && !pt) || (!pd && pt)) {
+      if (!pd) {
+        problem = 'Enter the ETA date for trailer ' + tl + '.';
+        return;
+      }
+      if (!pt) {
         problem = 'Incoming trailer ' + tl +
                   ' needs both a date and a time for its ETA.';
         return;
@@ -2167,7 +2332,7 @@
       });
       (d.incoming || []).forEach(function (t) {
         if (t.bol === l.bol && t.tl) {
-          out.push('Trailer ' + t.tl + (t.eta ? ' arriving ' + t.eta : ''));
+          out.push('Trailer ' + t.tl + etaWords(t.eta));
         }
       });
     });
