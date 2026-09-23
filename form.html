@@ -2457,12 +2457,14 @@
 
     // What the Loads card asks. Live-load carriers supply every trailer, so
     // both halves are required and both stay editable until the load loads.
+    // One sentence per line, and the yard by name, as the other panels do.
+    var yard = sitePhrase() || 'the yard';
     document.getElementById('loadsnote').innerHTML = POOL
       ? '<b>Assign or confirm the driver for each load.</b>' +
-        'Bringing your own trailer for a load? Tick Live load on that load.'
+        'Bringing your own trailer for a load?<br>Tick Live load on that load.'
       : '<b>Driver and trailer are required on every load.</b>' +
-        'You can update the driver, trailer or ETA here any time before the load is loaded. ' +
-        'Trailer already in our yard? Tick Already on site.';
+        'You can update the driver, trailer or ETA here any time before the load is loaded.<br>' +
+        'Trailer already at ' + esc(yard) + '?<br>Tick Already on site.';
 
     // One blank row. Most visits add nothing, and + Add another is right there.
     document.getElementById('incoming').innerHTML = incRow();
