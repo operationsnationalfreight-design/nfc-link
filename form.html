@@ -119,21 +119,11 @@
   .livefields { display: none; }
   .livefields.on { display: block; }
 
-  /* THE TRAILER CHOICE ON A LOAD CARD.
-     Three answers (two for a live-load carrier), and only the chosen one's
-     fields on screen. Nothing chosen, nothing shown: most visits are about a
-     driver, and a card full of empty trailer boxes reads as a demand. */
-  .tseg { display: flex; margin: 2px 0 4px; border: 1px solid #bfc5c2;
-          border-radius: 3px; overflow: hidden; }
-  .tseg label { flex: 1 1 0; margin: 0; padding: 7px 4px; cursor: pointer;
-                text-transform: none; letter-spacing: 0; font-size: 12px;
-                font-weight: 600; color: #444; text-align: center;
-                background: #fff; border-left: 1px solid #bfc5c2;
-                white-space: normal; overflow: visible; line-height: 1.25; }
-  .tseg label:first-child { border-left: 0; }
-  .tseg label.on { background: #0d3320; color: #fff; }
-  .tseg input { position: absolute; opacity: 0; width: 1px; height: 1px;
-                margin: 0; padding: 0; }
+  /* THE TRAILER ON A LOAD CARD.
+     Pool carrier: a "Live load" tick (.livebox, above) opens trailer + ETA;
+     otherwise we supply the trailer and nothing shows. Live-load carrier:
+     trailer + ETA always, with an "Already on site" tick that swaps the ETA
+     for current SCAC and empty drop. */
   .tf { display: none; }
   .tchoice[data-mode="live"] .tf-tl, .tchoice[data-mode="live"] .tf-eta,
   .tchoice[data-mode="coming"] .tf-tl, .tchoice[data-mode="coming"] .tf-eta,
@@ -1332,38 +1322,40 @@
         // in, so the question does not apply, and ticking it would put the
         // load on CF.INBOX as a LIVE TRAILER for equipment that is under the
         // freight.
-        // THE TRAILER, AS ONE OF THREE ANSWERS.
+        // THE TRAILER ON THIS LOAD.
         //
-        // Live load: the driver arrives with the trailer attached and waits
-        // while it loads. Trailer coming: a trailer dropped ahead of pickup.
-        // Already on site: the trailer is in the yard under the carrier's own
-        // SCAC, and we ask ADC to change it to NFCJ; the empty the driver
-        // drops in exchange is asked for, or Bobtail. A live-load carrier
-        // brings every trailer, so they get the last two only.
+        // Pool carrier: we supply the trailer from the pool, so nothing is
+        // asked unless they tick Live load, meaning they bring their own for
+        // this load. A trailer they are sending into the pool goes in the
+        // Incoming Trailers panel, not here.
         //
-        // Offered only while the choice is open. A pool load with a trailer
-        // already assigned, anything loaded or rolling, and a pool return
-        // (already on a trailer heading in) keep their decision.
+        // Live-load carrier: they supply every trailer, so trailer and ETA are
+        // always on the card. "Already on site" swaps the ETA for the SCAC the
+        // trailer sits under today and the empty being dropped, and we ask ADC
+        // to change it to NFCJ.
+        //
+        // Offered only while it is still open: not on anything loaded or
+        // rolling, and on a pool card not once we have assigned a trailer or
+        // on a return, which is already on a trailer heading in.
         var tcOpen = !l.loaded && !l.gone &&
                      (POOL ? (!isReturn(l) && (l.live || !l.tl)) : true);
         if (tcOpen) {
-          var mode = l.live ? 'live' : (!POOL && l.tl ? 'coming' : '');
-          var opts = (POOL ? [['live', 'Live load']] : [])
-                       .concat([['coming', 'Trailer coming'], ['onsite', 'Already on site']]);
+          var mode = POOL ? (l.live ? 'live' : '') : 'coming';
           var sp0 = etaSplit(l.eta);
+          if (POOL) {
+            html += '<label class="livebox"><input type="checkbox" class="live" data-i="' + i +
+                    '"' + (l.live ? ' checked' : '') + ' onchange="onLive(this)">Live load</label>';
+          }
           html += '<div class="tchoice" data-live="' + i + '" data-i="' + i +
                   '" data-mode="' + mode + '"' +
                   (atYard ? ' style="display:none;"' : '') + '>' +
-                  '<label>Trailer</label><div class="tseg">' +
-                  opts.map(function (o) {
-                    return '<label class="' + (mode === o[0] ? 'on' : '') + '">' +
-                           '<input type="radio" name="tc' + i + '" class="tc" data-i="' + i +
-                           '" value="' + o[0] + '"' + (mode === o[0] ? ' checked' : '') +
-                           ' onchange="onTChoice(this)">' + o[1] + '</label>';
-                  }).join('') + '</div>' +
                   '<div class="tf tf-tl"><label class="tll">Trailer #</label>' +
                   '<input class="ltl" data-i="' + i + '" autocomplete="off" value="' +
-                  esc(mode ? l.tl : '') + '"></div>' +
+                  esc(mode ? l.tl : '') + '">' +
+                  (POOL ? '' :
+                    '<label class="bobbox"><input type="checkbox" class="los" data-i="' + i +
+                    '" onchange="onCardOnsite(this)">Already on site</label>') +
+                  '</div>' +
                   '<div class="tf tf-eta"><label>ETA to shipper</label>' +
                   '<div class="etarow">' +
                   dateBox('letad', ' data-i="' + i + '"', isoToMD(sp0.date)) +
@@ -1579,16 +1571,29 @@
 
   }
 
-  function onTChoice(r) {
-    var i = r.getAttribute('data-i');
-    var box = document.querySelector('.tchoice[data-i="' + i + '"]');
-    if (!box) return;
-    box.setAttribute('data-mode', r.value);
-    [].forEach.call(box.querySelectorAll('.tseg label'), function (lb) {
-      lb.classList.toggle('on', lb.contains(r));
-    });
-    var ll = box.querySelector('.tll');
-    if (ll) ll.textContent = r.value === 'onsite' ? 'Trailer on site' : 'Trailer #';
+  // Pool carrier: Live load opens trailer + ETA; unticking hides and clears
+  // them, so nothing half-typed is sent.
+  function onLive(box) {
+    var i = box.getAttribute('data-i');
+    var wrap = document.querySelector('.tchoice[data-i="' + i + '"]');
+    if (!wrap) return;
+    wrap.setAttribute('data-mode', box.checked ? 'live' : '');
+    if (!box.checked) {
+      ['.ltl', '.letad', '.letat'].forEach(function (sel) {
+        var el = wrap.querySelector(sel);
+        if (el) el.value = '';
+      });
+    }
+    TOUCHED = true;
+  }
+  // Live-load carrier: Already on site swaps the ETA for SCAC and empty drop.
+  function onCardOnsite(box) {
+    var i = box.getAttribute('data-i');
+    var wrap = document.querySelector('.tchoice[data-i="' + i + '"]');
+    if (!wrap) return;
+    wrap.setAttribute('data-mode', box.checked ? 'onsite' : 'coming');
+    var ll = wrap.querySelector('.tll');
+    if (ll) ll.textContent = box.checked ? 'Trailer on site' : 'Trailer #';
     TOUCHED = true;
   }
   // Bobtail: the driver drops nothing, so the empty box is cleared and shut.
