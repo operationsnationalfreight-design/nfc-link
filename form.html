@@ -683,7 +683,7 @@
   // Live-load carriers edit on the load card itself, so they never see this.
   function enrouteAtYard(tl, eta) {
     var here = String(tl || '').trim().toUpperCase();
-    return /^AT ADC$/i.test(String(eta || '').trim()) ||
+    return /^(AT ADC|SCAC SWAP)$/i.test(String(eta || '').trim()) ||
            (!!here && (ONSITE || []).some(function (o) {
              return String(o.tl || '').trim().toUpperCase() === here;
            }));
@@ -1140,6 +1140,10 @@
                    (!!here && (ONSITE || []).some(function (o) {
                      return String(o.tl || '').trim().toUpperCase() === here;
                    }));
+      // In the yard under the carrier's own SCAC, waiting on ADC to change it
+      // to NFCJ. Nothing for the carrier to enter, so the trailer fields stay
+      // hidden exactly as for a trailer at the yard.
+      var swapPend = /^SCAC SWAP$/i.test(String(l.eta || '').trim());
 
       // A removal we have not applied yet. Treated as empty everywhere below,
       // so the card cannot show a driver the carrier has already taken off.
@@ -1201,7 +1205,9 @@
           // "on site" rather than "at yard", matching the panel heading these
           // carriers are already reading two inches to the left.
           var where = String(l.eta || '').trim();
-          var loc = atYard
+          var loc = swapPend
+                  ? ' <span style="color:#8a6d1f;font-weight:700">&middot; on site, SCAC change pending</span>'
+                  : atYard
                   ? ' <span style="color:#2e7d32">&middot; on site</span>'
                   : !where ? ''
                       : ' <span style="color:#8a6d1f;font-weight:700">' +
@@ -1348,7 +1354,7 @@
           }
           html += '<div class="tchoice" data-live="' + i + '" data-i="' + i +
                   '" data-mode="' + mode + '"' +
-                  (atYard ? ' style="display:none;"' : '') + '>' +
+                  ((atYard || swapPend) ? ' style="display:none;"' : '') + '>' +
                   '<div class="tf tf-tl"><label class="tll">Trailer #</label>' +
                   '<input class="ltl" data-i="' + i + '" autocomplete="off" value="' +
                   esc(mode ? l.tl : '') + '">' +
@@ -2005,6 +2011,32 @@
       }
       p.incoming.push({ tl: tl, eta: etaJoin(pd, pt) });
     });
+
+    // LIVE-LOAD CARRIERS: DRIVER AND TRAILER, BOTH, ON EVERY LOAD THEY SEND.
+    //
+    // They supply the trailer, so a load sent with a driver and no trailer
+    // (or the other way round) leaves a hole nobody comes back to fill. Any
+    // card this submission touches must end up with both, counting what is
+    // already on file. Loads already loaded or rolling, returns, and sites
+    // with no trailer tracking (WTB) are exempt.
+    if (!problem && !POOL) {
+      var sent = {};
+      p.assignments.concat(p.newDrivers, p.incoming).forEach(function (x) {
+        if (x && x.bol) sent[x.bol] = true;
+      });
+      LOADS.forEach(function (l, i) {
+        if (problem || !sent[l.bol]) return;
+        if (l.loaded || l.gone || isReturn(l) || l.trk === false) return;
+        var sel = document.querySelector('.drv[data-i="' + i + '"]');
+        var drv = sel ? (sel.value === '__NEW__' ? newName(i) : sel.value)
+                      : (l.pendingDriver || l.driver || '');
+        if (!drv) { problem = 'Choose the driver for ' + l.nfc + '.'; return; }
+        var wrap = document.querySelector('.tchoice[data-i="' + i + '"]');
+        var shown = wrap && wrap.style.display !== 'none';
+        var tl = shown ? v('ltl', i) : String(l.tl || '').trim();
+        if (!tl) { problem = 'Enter the trailer for ' + l.nfc + '.'; return; }
+      });
+    }
 
     if (problem) {
       document.getElementById('status').innerHTML = '<span class="err">' + esc(problem) + '</span>';
