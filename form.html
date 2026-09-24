@@ -703,7 +703,7 @@
   // Live-load carriers edit on the load card itself, so they never see this.
   function enrouteAtYard(tl, eta) {
     var here = String(tl || '').trim().toUpperCase();
-    return /^(AT ADC|SCAC SWAP)$/i.test(String(eta || '').trim()) ||
+    return /^(AT ADC|SCAC SWAP|ON SITE)$/i.test(String(eta || '').trim()) ||
            (!!here && (ONSITE || []).some(function (o) {
              return String(o.tl || '').trim().toUpperCase() === here;
            }));
@@ -874,8 +874,10 @@
   // carrier never chose, and the ETA is now required whenever a trailer is
   // named, so the default would have satisfied the rule on its own.
   //
-  // "Already on site" replaces the ETA with the words: the trailer is in the
-  // yard under the carrier's own SCAC and we ask ADC to move it to NFCJ.
+  // "Already on site" replaces the ETA with one more tick: "Not currently under
+  // NFCJ". Ticked, it is a SCAC swap (we ask ADC to move it to NFCJ). Left
+  // unticked, the carrier is only correcting a number or naming the trailer
+  // actually dropped: recorded as on site, nobody emailed.
   function incRow() {
     return '<div class="inc">' +
            '<label class="osl"><input type="checkbox" class="ios" ' +
@@ -884,7 +886,8 @@
            dateBox('imd', '', '') +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
-           'oninput="onHHMM(this)"><span class="ostxt">on site</span></div>';
+           'oninput="onHHMM(this)"><span class="ostxt"><label class="osl">' +
+           '<input type="checkbox" class="ioswap">Not currently under NFCJ</label></span></div>';
   }
   function onIncOnsite(box) {
     var row = box.closest('.inc');
@@ -1155,7 +1158,7 @@
       // Computed once here because the status line and the input fields both
       // depend on it, and they must never disagree.
       var here = String(l.tl || '').trim().toUpperCase();
-      var atYard = /^AT ADC$/i.test(String(l.eta || '').trim()) ||
+      var atYard = /^(AT ADC|ON SITE)$/i.test(String(l.eta || '').trim()) ||
                    (!!here && (ONSITE || []).some(function (o) {
                      return String(o.tl || '').trim().toUpperCase() === here;
                    }));
@@ -1389,6 +1392,8 @@
                   'data-i="' + i + '" value="' + esc(sp0.time) + '">' +
                   '</div></div>' +
                   '<div class="tf tf-os">' +
+                  '<label class="bobbox"><input type="checkbox" class="lswap" data-i="' + i +
+                  '">Not currently under NFCJ</label>' +
                   '<label>Current SCAC <span class="opt">optional</span></label>' +
                   '<input class="lcs" data-i="' + i + '" maxlength="4" autocomplete="off" ' +
                   'style="text-transform:uppercase">' +
@@ -1928,7 +1933,9 @@
             problem = 'Enter the empty being dropped for ' + l.nfc + ', or tick Bobtail.';
             return;
           }
+          var lsw = document.querySelector('.lswap[data-i="' + i + '"]');
           p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: 'ON SITE', onsite: true,
+                            swap: !!(lsw && lsw.checked),
                             cur: v('lcs', i).toUpperCase(),
                             empty: bobtail ? 'bobtail' : emp });
           return;
@@ -2014,7 +2021,8 @@
       // "12345 - SCAC SWAP" until the yard moves it to NFCJ.
       var os = r.querySelector('.ios');
       if (os && os.checked) {
-        p.incoming.push({ tl: tl, eta: 'ON SITE', onsite: true });
+        var sw = r.querySelector('.ioswap');
+        p.incoming.push({ tl: tl, eta: 'ON SITE', onsite: true, swap: !!(sw && sw.checked) });
         return;
       }
       var pd = mmdd(r.querySelector('.imd').value);
