@@ -758,7 +758,7 @@
              '" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
-             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #">' +
+             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
              dateBox('imd', '', md) +
              '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
@@ -882,13 +882,38 @@
     return '<div class="inc">' +
            '<label class="osl"><input type="checkbox" class="ios" ' +
            'onchange="onIncOnsite(this)">Already on site</label>' +
-           '<input class="tl" placeholder="Trailer #" title="Trailer #">' +
+           '<input class="tl" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
            dateBox('imd', '', '') +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
            'oninput="onHHMM(this)"><span class="ostxt"><label class="osl">' +
            '<input type="checkbox" class="ioswap">Not currently under NFCJ</label></span></div>';
   }
+  // TRAILER NUMBERS: every letter and number. Carriers were typing "618" for
+  // "25V618". If what they typed is numbers only while their own trailers on
+  // file carry letters, the browser points at the box with one of their own
+  // trailers as the example. It never blocks a submit, clears as they type,
+  // and a carrier whose trailers really are all numbers never sees it.
+  function tlExample() {
+    var all = [];
+    (ONSITE || []).forEach(function (o) { all.push(o.tl); });
+    (LOADS || []).forEach(function (l) { all.push(l.tl); });
+    for (var i = 0; i < all.length; i++) {
+      var t = String(all[i] || '').trim();
+      if (/[A-Za-z]/.test(t) && /\d/.test(t)) return t.toUpperCase();
+    }
+    return '';
+  }
+  function tlCheck(el) {
+    var v = String(el.value || '').trim();
+    el.setCustomValidity('');
+    if (!/^\d+$/.test(v)) return;
+    var ex = tlExample();
+    if (!ex) return;
+    el.setCustomValidity('Enter the full trailer number, every letter and number (like ' + ex + ').');
+    el.reportValidity();
+  }
+
   function onIncOnsite(box) {
     var row = box.closest('.inc');
     row.classList.toggle('os', box.checked);
@@ -1378,7 +1403,7 @@
                   '" data-mode="' + mode + '"' +
                   ((atYard || swapPend) ? ' style="display:none;"' : '') + '>' +
                   '<div class="tf tf-tl"><label class="tll">Trailer #</label>' +
-                  '<input class="ltl" data-i="' + i + '" autocomplete="off" value="' +
+                  '<input class="ltl" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')" value="' +
                   esc(mode ? l.tl : '') + '">' +
                   (POOL ? '' :
                     '<label class="bobbox"><input type="checkbox" class="los" data-i="' + i +
@@ -1398,7 +1423,7 @@
                   '<input class="lcs" data-i="' + i + '" maxlength="4" autocomplete="off" ' +
                   'style="text-transform:uppercase">' +
                   '<label>Empty being dropped</label>' +
-                  '<input class="lemp" data-i="' + i + '" autocomplete="off">' +
+                  '<input class="lemp" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
                   '<label class="bobbox"><input type="checkbox" class="lbob" data-i="' + i +
                   '" onchange="onBobtail(this)">Bobtail</label>' +
                   '</div></div>';
