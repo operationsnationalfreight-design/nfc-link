@@ -140,8 +140,8 @@
   .card { scroll-margin-top: 110px; }
   .load { scroll-margin-top: 110px; }
   .loadsnote a { color: #0d3320; font-weight: 700; }
-  /* Half-second fades when the section or the load in hand changes. */
-  .loadsnote > * { transition: opacity .5s; }
+  /* Quick fades (0.17 s each way) when the section or the load in hand changes. */
+  .loadsnote > * { transition: opacity .17s ease-in-out; }
   .loadsnote.swap > * { opacity: 0; }
   .loadsnote .need { color: #8a3a1f; }
   .loadsnote .ok { color: #2e7d32; }
@@ -2486,7 +2486,7 @@
   // suggested. One sentence per line, the yard by name.
   var NOTE = { sec: 'loads', i: null, idx: { loads: 0, onsite: -1, incoming: -1 },
                tok: 0, leave: 0, mouseAt: 0 };
-  var NOTE_FADE = 500;     // ms each way
+  var NOTE_FADE = 170;     // ms each way; matches the CSS transition
   // A real mouse or trackpad. Phones fire mouse events too (after a tap, or
   // when the page draws under the last touch), so those are not trusted as
   // "where the cursor is"; the section at the top of the screen is used instead.
