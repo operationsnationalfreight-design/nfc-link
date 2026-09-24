@@ -130,6 +130,14 @@
                line-height: 1.45; color: #1f2a24; background: #f1f6f3;
                border: 1px solid #d3e0d8; border-left: 4px solid #0d3320;
                border-radius: 3px; }
+  .loadsnote { position: sticky; top: 0; z-index: 5; min-height: 64px;
+               box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  .loadsnote a { color: #0d3320; font-weight: 700; }
+  .loadsnote .tip { transition: opacity .25s; }
+  .loadsnote .tip.fade { opacity: 0; }
+  .loadsnote .need { color: #8a3a1f; }
+  .loadsnote .ok { color: #2e7d32; }
+  @media (prefers-reduced-motion: reduce) { .loadsnote .tip { transition: none; } }
   .loadsnote b { display: block; font-size: 13.5px; color: #0d3320;
                  margin-bottom: 2px; }
   .tf { display: none; }
@@ -2450,21 +2458,158 @@
   }
 
   // Draws everything from the current state.
+  // WHAT THE LOADS CARD ASKS: COUNTED, ROTATING, AND FOLLOWING THE CARRIER.
+  //
+  // Pinned to the top of the Loads card. With no card in hand it counts what
+  // is still missing and rotates one tip every few seconds (paused while the
+  // pointer is on it). With a card in hand (pointer over it, or typing in it)
+  // it names that load and says exactly what it still needs. Pool carriers
+  // are pointed at Incoming Trailers; Live load is never suggested here.
+  // One sentence per line, the yard by name, as the other panels do.
+  var NOTE = { i: null, tip: 0, hold: false, leave: 0 };
+
+  function noteDriver(l, i) {
+    var sel = document.querySelector('.drv[data-i="' + i + '"]');
+    if (!sel) return { name: l.pendingDriver || l.driver || '', isNew: false };
+    if (sel.value === '__NEW__') return { name: newName(i), isNew: true };
+    return { name: sel.value, isNew: false };
+  }
+  function noteTrailer(l, i) {
+    var wrap = document.querySelector('.tchoice[data-i="' + i + '"]');
+    if (!wrap || wrap.style.display === 'none') {
+      return { mode: '', tl: String(l.tl || '').trim() };
+    }
+    var bob = document.querySelector('.lbob[data-i="' + i + '"]');
+    return { mode: wrap.getAttribute('data-mode') || '', tl: v('ltl', i),
+             date: mmdd(v('letad', i)), time: hhmm(v('letat', i)),
+             empty: v('lemp', i), bob: !!(bob && bob.checked) };
+  }
+  function noteTrailerNeeded(l) {
+    return !POOL && l.trk !== false && !isReturn(l);
+  }
+
+  function noteCounts() {
+    var needD = 0, needT = 0;
+    LOADS.forEach(function (l, i) {
+      if (l.loaded || l.gone || isReturn(l)) return;
+      if (!noteDriver(l, i).name) needD++;
+      if (noteTrailerNeeded(l) && !noteTrailer(l, i).tl) needT++;
+    });
+    return { d: needD, t: needT };
+  }
+
+  function noteTips() {
+    var yard = esc(sitePhrase() || 'the yard');
+    var tips = POOL
+      ? ['Sending equipment to ' + yard + '?<br>Add it under <a href="#inccard">Incoming Trailers</a>.']
+      : ['Driver and trailer are required on every load.',
+         'Update the driver, trailer or ETA any time before the load is loaded.',
+         'Trailer already at ' + yard + '?<br>Tick Already on site on that load.'];
+    return tips.concat(['New driver?<br>Choose + Add a new driver from the list.',
+                        'Nothing is saved until you press Submit.']);
+  }
+
+  // What one load still needs, one line each.
+  function noteForLoad(i) {
+    var l = LOADS[i];
+    var p = (l.stops || []).filter(function (x) { return /pickup/i.test(x.type || ''); })[0];
+    var head = esc(l.nfc) + (p ? ' &middot; Pickup ' + esc(String(p.date || '').slice(0, 5)) +
+                                 (p.time ? ' ' + esc(p.time) : '') : '');
+    if (l.loaded || l.gone) return '<b>' + head + '</b>Loaded. Nothing needed on this load.';
+    var lines = [];
+    var d = noteDriver(l, i);
+    if (d.isNew && !d.name) lines.push('Enter the new driver\'s name and details.');
+    else if (!d.name) lines.push('Choose a driver.');
+    var t = noteTrailer(l, i);
+    var trailerAsk = noteTrailerNeeded(l) || t.mode === 'live';
+    if (/^SCAC SWAP$/i.test(String(l.eta || '').trim())) {
+      lines.push('Trailer ' + esc(l.tl) + ' is on site, waiting on the SCAC change.<br>Nothing to do.');
+    } else if (trailerAsk && t.mode === 'onsite') {
+      if (!t.tl) lines.push('Enter the trailer already on site.');
+      if (!t.bob && !t.empty) lines.push('Enter the empty being dropped, or tick Bobtail.');
+    } else if (trailerAsk && t.mode) {
+      if (!t.tl) lines.push('Enter the trailer.');
+      if (!t.date) lines.push('Enter the ETA date.');
+      else if (!t.time) lines.push('Enter the ETA time.');
+    } else if (trailerAsk && !t.tl) {
+      lines.push('Enter the trailer.');
+    }
+    return '<b>' + head + '</b>' + (lines.length
+      ? '<span class="need">' + lines.join('<br>') + '</span>'
+      : '<span class="ok">All set on this load.</span>');
+  }
+
+  function loadsNote() {
+    var el = document.getElementById('loadsnote');
+    if (!el) return;
+    if (NOTE.i !== null && LOADS[NOTE.i]) { el.innerHTML = noteForLoad(NOTE.i); return; }
+    var c = noteCounts();
+    var n = function (k, what) { return k + (k === 1 ? ' load needs ' : ' loads need ') + what + '.'; };
+    var todo = POOL
+      ? (c.d ? n(c.d, 'a driver') : 'Every load has a driver.')
+      : (c.d && c.t ? n(Math.max(c.d, c.t), 'a driver or trailer')
+         : c.d ? n(c.d, 'a driver') : c.t ? n(c.t, 'a trailer')
+         : 'Every load has a driver and trailer.');
+    var tips = noteTips();
+    el.innerHTML = '<b>' + todo + '</b><span class="tip">' + tips[NOTE.tip % tips.length] + '</span>';
+  }
+
+  // Which load is in hand: the focused one first, else the one under the pointer.
+  function noteCardIndex(node) {
+    var card = node && node.closest ? node.closest('#loads .load[data-bol]') : null;
+    if (!card) return null;
+    var bol = card.getAttribute('data-bol');
+    for (var k = 0; k < LOADS.length; k++) if (LOADS[k].bol === bol) return k;
+    return null;
+  }
+  function noteSet(i) {
+    clearTimeout(NOTE.leave);
+    if (i === NOTE.i) { loadsNote(); return; }
+    NOTE.i = i;
+    loadsNote();
+  }
+  function noteRelease() {
+    clearTimeout(NOTE.leave);
+    NOTE.leave = setTimeout(function () {
+      var f = noteCardIndex(document.activeElement);
+      NOTE.i = f;
+      loadsNote();
+    }, 1200);
+  }
+  document.addEventListener('focusin', function (e) {
+    var i = noteCardIndex(e.target);
+    if (i !== null) noteSet(i); else if (NOTE.i !== null) noteRelease();
+  });
+  document.addEventListener('mouseover', function (e) {
+    if (noteCardIndex(document.activeElement) !== null) return;   // typing wins
+    var i = noteCardIndex(e.target);
+    if (i !== null) noteSet(i); else if (NOTE.i !== null) noteRelease();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#loads')) loadsNote();
+  });
+  document.addEventListener('input', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#loads')) loadsNote();
+  });
+  // Tip rotation: every 6 s, only on the summary, paused on hover or a hidden tab.
+  setInterval(function () {
+    var el = document.getElementById('loadsnote');
+    if (!el || NOTE.i !== null || NOTE.hold || document.hidden || !LOADS.length) return;
+    var tip = el.querySelector('.tip');
+    if (!tip) return;
+    tip.classList.add('fade');
+    setTimeout(function () { NOTE.tip++; loadsNote(); }, 250);
+  }, 6000);
+  document.addEventListener('mouseover', function (e) {
+    NOTE.hold = !!(e.target && e.target.closest && e.target.closest('#loadsnote'));
+  });
+
   function renderAll() {
     // Live-load carriers report equipment on the shipment card, so a pool
     // list has nowhere to go for them.
     document.getElementById('inccard').style.display = POOL ? 'block' : 'none';
 
-    // What the Loads card asks. Live-load carriers supply every trailer, so
-    // both halves are required and both stay editable until the load loads.
-    // One sentence per line, and the yard by name, as the other panels do.
-    var yard = sitePhrase() || 'the yard';
-    document.getElementById('loadsnote').innerHTML = POOL
-      ? '<b>Assign or confirm the driver for each load.</b>' +
-        'Bringing your own trailer for a load?<br>Tick Live load on that load.'
-      : '<b>Driver and trailer are required on every load.</b>' +
-        'You can update the driver, trailer or ETA here any time before the load is loaded.<br>' +
-        'Trailer already at ' + esc(yard) + '?<br>Tick Already on site.';
+
 
     // One blank row. Most visits add nothing, and + Add another is right there.
     document.getElementById('incoming').innerHTML = incRow();
@@ -2477,6 +2622,7 @@
     renderEnroute();
     renderPendingTrailers();
     renderLoads();
+    loadsNote();
 
     var b = document.getElementById('send');
     b.disabled = false;
