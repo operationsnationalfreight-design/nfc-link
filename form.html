@@ -604,17 +604,13 @@
     var on = document.getElementById('onsitenote');
     var inc = document.getElementById('incnote');
     if (on) {
-      on.textContent = where ? 'Your equipment currently at ' + where + '.'
-                             : 'Your equipment currently tracked.';
+      on.textContent = where ? 'At ' + where + '.' : 'Currently tracked.';
     }
     if (inc) {
       // One sentence per line. The second only offers corrections when there
       // is something listed to correct.
-      inc.innerHTML = (where ? 'Equipment heading to ' + esc(where) + '.'
-                             : 'Equipment heading in.') +
-                      '<br>' + (enrouteRows().length
-                                  ? 'Correct a number or ETA, or add new below.'
-                                  : 'Add incoming equipment below.');
+      inc.innerHTML = (where ? 'Heading to ' + esc(where) + '.' : 'Heading in.') +
+                      (enrouteRows().length ? '<br>Correct a number or ETA, or add new below.' : '');
     }
   }
 
@@ -1080,15 +1076,23 @@
     return h;
   }
 
-  function stopHtml(s) {
+  // Two things the card no longer repeats: a delivery date the "Delivering"
+  // bar above already says (the time stays), and the pickup yard for a carrier
+  // who only runs one site, which is every pickup they have.
+  function stopIso(d) {
+    var m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? m[3] + '-' + m[1] + '-' + m[2] : String(d || '').slice(0, 10);
+  }
+  function stopHtml(s, barIso) {
+    var oneSite = siteNames().length === 1;
     var out = '';
     s.forEach(function(x) {
-      // Appointment first, then the site, each on its own line. When is what
-      // a carrier plans around; where is the detail under it. Run together
-      // with a dot they wrapped wherever the card ran out of width.
+      var pick = /pickup/i.test(x.type || '');
+      var sameDay = !pick && barIso && stopIso(x.date) === barIso;
+      var when = sameDay ? (x.time || '') : (x.date + ' ' + (x.time || ''));
       out += '<div><b>' + esc(x.type.toUpperCase()) + '</b></div>' +
-             '<div class="leg"><div class="when">' + esc(x.date) + ' ' + esc(x.time) +
-             '</div>' + esc(x.city) + '</div>';
+             '<div class="leg"><div class="when">' + esc(when) + '</div>' +
+             (pick && oneSite ? '' : esc(x.city)) + '</div>';
     });
     return out;
   }
@@ -1249,7 +1253,7 @@
       }
 
       html += '<div class="split"><div class="left"><div class="stops">' +
-              stopHtml(l.stops) + '</div></div><div class="right">';
+              stopHtml(l.stops, l.delv) + '</div></div><div class="right">';
 
       // A departed load carries no note.
       //
@@ -2480,9 +2484,9 @@
       : (d && t ? n(Math.max(d, t), 'a driver or trailer')
          : d ? n(d, 'a driver') : t ? n(t, 'a trailer')
          : 'Every load has a driver and trailer.');
-    var guide = POOL
-      ? 'Sending equipment to ' + yard + '? Add it under ' +
-        '<a href="#inccard" data-go="inccard">Incoming Trailers</a>.'
+    // Pool carriers have Incoming Trailers right beside this, so the count is
+    // all they need here.
+    var guide = POOL ? ''
       : 'Driver and trailer are required on every load. ' +
         'Trailer already at ' + yard + '? Tick Already on site on that load.';
     el.innerHTML = '<b>' + status + '</b>' + guide;
@@ -2492,20 +2496,6 @@
   });
   document.addEventListener('input', function (e) {
     if (e.target && e.target.closest && e.target.closest('#loads')) loadsNote();
-  });
-  // The link: jump to the panel and pulse it once, like the driver field.
-  document.addEventListener('click', function (e) {
-    var a = e.target && e.target.closest ? e.target.closest('#loadsnote a[data-go]') : null;
-    if (!a) return;
-    e.preventDefault();
-    var target = document.getElementById(a.getAttribute('data-go'));
-    if (!target || target.style.display === 'none') return;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTimeout(function () {
-      target.classList.remove('pulse');
-      void target.offsetWidth;
-      target.classList.add('pulse');
-    }, 320);
   });
 
   function renderAll() {
