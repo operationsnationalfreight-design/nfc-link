@@ -130,16 +130,22 @@
                line-height: 1.45; color: #1f2a24; background: #f1f6f3;
                border: 1px solid #d3e0d8; border-left: 4px solid #0d3320;
                border-radius: 3px; }
-  .loadsnote { position: sticky; top: 0; z-index: 5; min-height: 64px;
+  /* Pinned to the top of the page, over every panel, so the tip for the
+     section in hand is always in view. */
+  .loadsnote { position: sticky; top: 0; z-index: 5; min-height: 64px; margin: 10px 0 0;
                box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  .loadsnote .sec { display: block; font-size: 10.5px; font-weight: 700; color: #6b7a72;
+                    text-transform: uppercase; letter-spacing: .5px; margin-bottom: 1px; }
+  /* A jumped-to panel lands below the pinned note, not under it. */
+  .card { scroll-margin-top: 110px; }
+  .load { scroll-margin-top: 110px; }
   .loadsnote a { color: #0d3320; font-weight: 700; }
-  /* Half-second fades: a tip fades out, swaps, fades back in; a switch to
-     another load does the same for the whole note. */
-  .loadsnote > *, .loadsnote .tip { transition: opacity .5s; }
-  .loadsnote.swap > *, .loadsnote .tip.fade { opacity: 0; }
+  /* Half-second fades when the section or the load in hand changes. */
+  .loadsnote > * { transition: opacity .5s; }
+  .loadsnote.swap > * { opacity: 0; }
   .loadsnote .need { color: #8a3a1f; }
   .loadsnote .ok { color: #2e7d32; }
-  @media (prefers-reduced-motion: reduce) { .loadsnote > *, .loadsnote .tip { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .loadsnote > * { transition: none; } }
   .loadsnote b { display: block; font-size: 13.5px; color: #0d3320;
                  margin-bottom: 2px; }
   .tf { display: none; }
@@ -297,7 +303,8 @@
      directly over the time it describes. */
   .inchead, .er .ln, #incoming .inc {
     display: grid; gap: 8px; align-items: center;
-    grid-template-columns: minmax(0,1.15fr) minmax(0,1fr) minmax(0,.62fr) minmax(0,.62fr); }
+    /* The date column also holds the calendar button, so it gets the room. */
+    grid-template-columns: minmax(0,1fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,.6fr); }
   .inchead { font-size: 10.5px; text-transform: uppercase; color: #555;
              letter-spacing: .03em; padding: 2px 4px 4px;
              border-bottom: 1px solid #ddd; }
@@ -446,10 +453,12 @@
     <div class="sub" id="cname"></div>
   </div>
 
+  <div class="loadsnote" id="loadsnote">Assign or confirm the driver for each load.</div>
+
   <div class="cols">
 
     <div class="col">
-      <div class="card">
+      <div class="card" id="onsitecard">
         <h2>Trailers On Site</h2>
         <p class="note" id="onsitenote">Your equipment currently tracked.</p>
         <div id="onsite">
@@ -469,9 +478,8 @@
     </div>
 
     <div class="col">
-      <div class="card">
+      <div class="card" id="loadscard">
         <h2>Loads</h2>
-        <div class="loadsnote" id="loadsnote">Assign or confirm the driver for each load.</div>
         <div id="loads">
           <div class="dbar first" style="opacity:.45;">&nbsp;</div>
           <div class="load"><div class="skel w45" style="margin:2px auto 10px;"></div>
@@ -2460,17 +2468,29 @@
   }
 
   // Draws everything from the current state.
-  // WHAT THE LOADS CARD ASKS: COUNTED, ROTATING, AND FOLLOWING THE CARRIER.
+  // THE PINNED NOTE: WHAT THE SECTION IN HAND NEEDS.
   //
-  // Pinned to the top of the Loads card. With no card in hand it counts what
-  // is still missing and rotates one tip every few seconds (paused while the
-  // pointer is on it). With a card in hand (pointer over it, or typing in it)
-  // it names that load and says exactly what it still needs. Pool carriers
-  // are pointed at Incoming Trailers; Live load is never suggested here.
-  // One sentence per line, the yard by name, as the other panels do.
-  var NOTE = { i: null, tip: 0, hold: false, leave: 0, tok: 0 };
+  // Pinned to the top of the page. It follows the carrier by SECTION: Trailers
+  // On Site, Incoming Trailers (pool carriers) or Loads, whichever holds the
+  // cursor or the field they are typing in (on a phone, whichever is at the
+  // top of the screen). Each section has a few tips; entering a section shows
+  // the next one, and nothing changes while they stay in it. No timer.
+  //
+  // Inside Loads, a load card in hand names that load and says exactly what it
+  // still needs; moving between cards is not leaving the section.
+  //
+  // Links in a tip jump to that section, pulse it with the same green pulse as
+  // the driver field, and bring up that section's next tip.
+  //
+  // Pool carriers are pointed at Incoming Trailers; Live load is never
+  // suggested. One sentence per line, the yard by name.
+  var NOTE = { sec: 'loads', i: null, idx: { loads: 0, onsite: -1, incoming: -1 },
+               tok: 0, leave: 0, mouseAt: 0 };
   var NOTE_FADE = 500;     // ms each way
-  var NOTE_LIFE = 18000;   // ms a tip stays up
+  // A real mouse or trackpad. Phones fire mouse events too (after a tap, or
+  // when the page draws under the last touch), so those are not trusted as
+  // "where the cursor is"; the section at the top of the screen is used instead.
+  var NOTE_HOVER = !!(window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches);
 
   function noteDriver(l, i) {
     var sel = document.querySelector('.drv[data-i="' + i + '"]');
@@ -2491,7 +2511,6 @@
   function noteTrailerNeeded(l) {
     return !POOL && l.trk !== false && !isReturn(l);
   }
-
   function noteCounts() {
     var needD = 0, needT = 0;
     LOADS.forEach(function (l, i) {
@@ -2501,16 +2520,55 @@
     });
     return { d: needD, t: needT };
   }
+  function noteGo(id, text) { return '<a href="#' + id + '" data-go="' + id + '">' + text + '</a>'; }
 
-  function noteTips() {
+  // Each section: a heading, a status line, and its tips.
+  function noteSection(sec) {
     var yard = esc(sitePhrase() || 'the yard');
-    var tips = POOL
-      ? ['Sending equipment to ' + yard + '?<br>Add it under <a href="#inccard">Incoming Trailers</a>.']
-      : ['Driver and trailer are required on every load.',
-         'Update the driver, trailer or ETA any time before the load is loaded.',
-         'Trailer already at ' + yard + '?<br>Tick Already on site on that load.'];
-    return tips.concat(['New driver?<br>Choose + Add a new driver from the list.',
-                        'Nothing is saved until you press Submit.']);
+    var plural = function (k, one, many) { return k + ' ' + (k === 1 ? one : many); };
+    if (sec === 'onsite') {
+      var n = (ONSITE || []).length;
+      return { name: 'Trailers On Site',
+               status: n ? plural(n, 'trailer', 'trailers') + ' checked in at ' + yard + '.'
+                         : 'Nothing checked in at ' + yard + ' right now.',
+               tips: ['Select an assigned trailer to jump to its load.',
+                      POOL ? 'In the yard but not listed here?<br>It may still be under your own SCAC. ' +
+                             'Add it under ' + noteGo('inccard', 'Incoming Trailers') +
+                             ' and tick Already on site.'
+                           : 'In the yard but not listed here?<br>It may still be under your own SCAC. ' +
+                             'Tick Already on site on its load under ' + noteGo('loadscard', 'Loads') + '.',
+                      'This list follows the yard: trailers appear as they check in ' +
+                      'and drop off as they leave.'] };
+    }
+    if (sec === 'incoming') {
+      var k = enrouteRows().length;
+      return { name: 'Incoming Trailers',
+               status: k ? plural(k, 'trailer', 'trailers') + ' listed heading to ' + yard + '.'
+                         : 'No trailers listed heading to ' + yard + ' yet.',
+               tips: ['Add each trailer heading to ' + yard + ' with its ETA date and time.',
+                      'Trailer already at ' + yard + ' under your own SCAC?<br>' +
+                      'Tick Already on site and we ask the yard to change it to NFCJ.',
+                      'Wrong number or ETA on a trailer listed here?<br>Correct it in its row and press Submit.',
+                      'Assigning drivers?<br>Choose them on each load under ' +
+                      noteGo('loadscard', 'Loads') + '.'] };
+    }
+    var c = noteCounts();
+    var nd = function (q, what) { return q + (q === 1 ? ' load needs ' : ' loads need ') + what + '.'; };
+    return { name: 'Loads',
+             status: POOL
+               ? (c.d ? nd(c.d, 'a driver') : 'Every load has a driver.')
+               : (c.d && c.t ? nd(Math.max(c.d, c.t), 'a driver or trailer')
+                  : c.d ? nd(c.d, 'a driver') : c.t ? nd(c.t, 'a trailer')
+                  : 'Every load has a driver and trailer.'),
+             tips: POOL
+               ? ['Choose a driver on each load, or + Add a new driver from the list.',
+                  'Sending equipment to ' + yard + '?<br>Add it under ' +
+                  noteGo('inccard', 'Incoming Trailers') + '.',
+                  'Nothing is saved until you press Submit.']
+               : ['Driver and trailer are required on every load.',
+                  'Update the driver, trailer or ETA any time before the load is loaded.',
+                  'Trailer already at ' + yard + '?<br>Tick Already on site on that load.',
+                  'Nothing is saved until you press Submit.'] };
   }
 
   // What one load still needs, one line each.
@@ -2519,7 +2577,8 @@
     var p = (l.stops || []).filter(function (x) { return /pickup/i.test(x.type || ''); })[0];
     var head = esc(l.nfc) + (p ? ' &middot; Pickup ' + esc(String(p.date || '').slice(0, 5)) +
                                  (p.time ? ' ' + esc(p.time) : '') : '');
-    if (l.loaded || l.gone) return '<b>' + head + '</b>Loaded. Nothing needed on this load.';
+    var sec = '<span class="sec">Loads</span>';
+    if (l.loaded || l.gone) return sec + '<b>' + head + '</b>Loaded. Nothing needed on this load.';
     var lines = [];
     var d = noteDriver(l, i);
     if (d.isNew && !d.name) lines.push('Enter the new driver\'s name and details.');
@@ -2538,15 +2597,25 @@
     } else if (trailerAsk && !t.tl) {
       lines.push('Enter the trailer.');
     }
-    return '<b>' + head + '</b>' + (lines.length
+    return sec + '<b>' + head + '</b>' + (lines.length
       ? '<span class="need">' + lines.join('<br>') + '</span>'
       : '<span class="ok">All set on this load.</span>');
   }
 
+  function loadsNote() {
+    var el = document.getElementById('loadsnote');
+    if (!el) return;
+    if (NOTE.sec === 'loads' && NOTE.i !== null && LOADS[NOTE.i]) {
+      el.innerHTML = noteForLoad(NOTE.i); return;
+    }
+    var x = noteSection(NOTE.sec);
+    var tip = x.tips[Math.max(0, NOTE.idx[NOTE.sec]) % x.tips.length];
+    el.innerHTML = '<span class="sec">' + x.name + '</span><b>' + x.status + '</b>' +
+                   '<span class="tip">' + tip + '</span>';
+  }
+
   // Two frames, so the browser paints the hidden state before fading back in.
   function noteShow(fn) { requestAnimationFrame(function () { requestAnimationFrame(fn); }); }
-
-  // Fade the whole note out, redraw, fade in. A newer swap cancels an older one.
   function noteSwap() {
     var el = document.getElementById('loadsnote');
     if (!el) return;
@@ -2559,79 +2628,96 @@
     }, NOTE_FADE);
   }
 
-  function loadsNote() {
-    var el = document.getElementById('loadsnote');
-    if (!el) return;
-    if (NOTE.i !== null && LOADS[NOTE.i]) { el.innerHTML = noteForLoad(NOTE.i); return; }
-    var c = noteCounts();
-    var n = function (k, what) { return k + (k === 1 ? ' load needs ' : ' loads need ') + what + '.'; };
-    var todo = POOL
-      ? (c.d ? n(c.d, 'a driver') : 'Every load has a driver.')
-      : (c.d && c.t ? n(Math.max(c.d, c.t), 'a driver or trailer')
-         : c.d ? n(c.d, 'a driver') : c.t ? n(c.t, 'a trailer')
-         : 'Every load has a driver and trailer.');
-    var tips = noteTips();
-    el.innerHTML = '<b>' + todo + '</b><span class="tip">' + tips[NOTE.tip % tips.length] + '</span>';
+  // Where a node sits: its section, and inside Loads, the load card.
+  function noteWhere(node) {
+    if (!node || !node.closest) return null;
+    if (node.closest('#loadsnote')) return null;
+    var card = node.closest('.card');
+    if (!card) return null;
+    if (card.id === 'onsitecard') return { sec: 'onsite', i: null };
+    if (card.id === 'inccard') return { sec: 'incoming', i: null };
+    if (card.id !== 'loadscard') return null;
+    var lc = node.closest('#loads .load[data-bol]');
+    var i = null;
+    if (lc) {
+      var bol = lc.getAttribute('data-bol');
+      for (var k = 0; k < LOADS.length; k++) if (LOADS[k].bol === bol) { i = k; break; }
+    }
+    return { sec: 'loads', i: i };
   }
 
-  // Which load is in hand: the focused one first, else the one under the pointer.
-  function noteCardIndex(node) {
-    var card = node && node.closest ? node.closest('#loads .load[data-bol]') : null;
-    if (!card) return null;
-    var bol = card.getAttribute('data-bol');
-    for (var k = 0; k < LOADS.length; k++) if (LOADS[k].bol === bol) return k;
-    return null;
-  }
-  function noteSet(i) {
+  // Move to a place. A new section shows its next tip; a new load card inside
+  // Loads shows that load; staying put only refreshes the counts.
+  function noteMove(w, now) {
+    if (!w) return;
     clearTimeout(NOTE.leave);
-    if (i === NOTE.i) { loadsNote(); return; }
-    NOTE.i = i;
-    noteSwap();
-  }
-  function noteRelease() {
-    clearTimeout(NOTE.leave);
-    NOTE.leave = setTimeout(function () {
-      var f = noteCardIndex(document.activeElement);
-      if (f === NOTE.i) return;
-      NOTE.i = f;
+    if (w.sec !== NOTE.sec) {
+      NOTE.sec = w.sec;
+      NOTE.i = w.i;
+      NOTE.idx[w.sec] = (NOTE.idx[w.sec] == null ? -1 : NOTE.idx[w.sec]) + 1;
+      if (now) loadsNote(); else noteSwap();
+      return;
+    }
+    if (w.i !== NOTE.i) {
+      if (w.i === null) {                  // off a card, still in Loads: settle first
+        NOTE.leave = setTimeout(function () { NOTE.i = null; noteSwap(); }, 1200);
+        return;
+      }
+      NOTE.i = w.i;
       noteSwap();
-    }, 1200);
+      return;
+    }
+    loadsNote();
   }
-  document.addEventListener('focusin', function (e) {
-    var i = noteCardIndex(e.target);
-    if (i !== null) noteSet(i); else if (NOTE.i !== null) noteRelease();
-  });
+
+  document.addEventListener('focusin', function (e) { noteMove(noteWhere(e.target)); });
   document.addEventListener('mouseover', function (e) {
-    if (noteCardIndex(document.activeElement) !== null) return;   // typing wins
-    var i = noteCardIndex(e.target);
-    if (i !== null) noteSet(i); else if (NOTE.i !== null) noteRelease();
+    if (!NOTE_HOVER) return;
+    NOTE.mouseAt = Date.now();
+    var f = noteWhere(document.activeElement);
+    if (f && document.activeElement !== document.body) return;   // typing wins
+    noteMove(noteWhere(e.target));
   });
+  // Phones have no pointer: the section at the top of the screen, below the
+  // note, is the one in hand. Load cards count as Loads, not as a card.
+  var noteScrollT = 0;
+  window.addEventListener('scroll', function () {
+    if (NOTE_HOVER && Date.now() - NOTE.mouseAt < 3000) return;
+    clearTimeout(noteScrollT);
+    noteScrollT = setTimeout(function () {
+      var f = noteWhere(document.activeElement);
+      if (f && document.activeElement !== document.body) return;
+      var el = document.getElementById('loadsnote');
+      if (!el) return;
+      var y = el.getBoundingClientRect().bottom + 30;
+      var w = noteWhere(document.elementFromPoint(window.innerWidth / 2, y));
+      if (w) { w.i = w.sec === 'loads' ? NOTE.i : null; noteMove(w); }
+    }, 150);
+  }, { passive: true });
   document.addEventListener('change', function (e) {
-    if (e.target && e.target.closest && e.target.closest('#loads')) loadsNote();
+    if (e.target && e.target.closest && e.target.closest('.card')) loadsNote();
   });
   document.addEventListener('input', function (e) {
-    if (e.target && e.target.closest && e.target.closest('#loads')) loadsNote();
+    if (e.target && e.target.closest && e.target.closest('.card')) loadsNote();
   });
-  // Tip rotation: every 18 s, only on the summary, paused on hover or a
-  // hidden tab. Fades out, swaps, fades in.
-  setInterval(function () {
-    var el = document.getElementById('loadsnote');
-    if (!el || NOTE.i !== null || NOTE.hold || document.hidden || !LOADS.length) return;
-    var tip = el.querySelector('.tip');
-    if (!tip || el.classList.contains('swap')) return;
-    tip.classList.add('fade');
-    setTimeout(function () {
-      if (NOTE.i !== null) return;
-      NOTE.tip++;
-      loadsNote();
-      var t = el.querySelector('.tip');
-      if (!t) return;
-      t.classList.add('fade');
-      noteShow(function () { t.classList.remove('fade'); });
-    }, NOTE_FADE);
-  }, NOTE_LIFE);
-  document.addEventListener('mouseover', function (e) {
-    NOTE.hold = !!(e.target && e.target.closest && e.target.closest('#loadsnote'));
+
+  // A link in the note: jump there, pulse the panel, show its next tip.
+  function notePulse(el) {
+    el.classList.remove('pulse');
+    void el.offsetWidth;                 // restart it if it is already running
+    el.classList.add('pulse');
+  }
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('#loadsnote a[data-go]') : null;
+    if (!a) return;
+    e.preventDefault();
+    var id = a.getAttribute('data-go');
+    var target = document.getElementById(id);
+    if (!target || target.style.display === 'none') return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(function () { notePulse(target); }, 320);
+    NOTE.mouseAt = Date.now();
+    noteMove(noteWhere(target.querySelector('h2') || target));
   });
 
   function renderAll() {
