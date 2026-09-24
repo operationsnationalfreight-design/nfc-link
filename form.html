@@ -140,8 +140,10 @@
   .card { scroll-margin-top: 110px; }
   .load { scroll-margin-top: 110px; }
   .loadsnote a { color: #0d3320; font-weight: 700; }
-  /* Quick fades (0.17 s each way) when the section or the load in hand changes. */
-  .loadsnote > * { transition: opacity .17s ease-in-out; }
+  /* Quick fades (0.07 s each way) when the section or the load in hand
+     changes. The box itself never changes size: noteReserve holds it at the
+     height of its tallest message, so nothing below it moves. */
+  .loadsnote > * { transition: opacity .07s ease-in-out; }
   .loadsnote.swap > * { opacity: 0; }
   .loadsnote .need { color: #8a3a1f; }
   .loadsnote .ok { color: #2e7d32; }
@@ -2486,7 +2488,7 @@
   // suggested. One sentence per line, the yard by name.
   var NOTE = { sec: 'loads', i: null, idx: { loads: 0, onsite: -1, incoming: -1 },
                tok: 0, leave: 0, mouseAt: 0 };
-  var NOTE_FADE = 170;     // ms each way; matches the CSS transition
+  var NOTE_FADE = 70;      // ms each way; matches the CSS transition
   // A real mouse or trackpad. Phones fire mouse events too (after a tap, or
   // when the page draws under the last touch), so those are not trusted as
   // "where the cursor is"; the section at the top of the screen is used instead.
@@ -2614,6 +2616,51 @@
                    '<span class="tip">' + tip + '</span>';
   }
 
+  // THE BOX HOLDS ITS SIZE.
+  //
+  // Every message the note can show right now (each section's tips, each
+  // load's own lines, and the longest a load's lines can get) is laid out in
+  // an invisible copy at the note's own width, and the note is held at the
+  // tallest. So a change of message never moves the page below it. Measured
+  // again when the loads change or the window is resized.
+  function noteReserve() {
+    var el = document.getElementById('loadsnote');
+    if (!el || !el.offsetWidth) return;
+    var probe = el.cloneNode(false);
+    probe.removeAttribute('id');
+    probe.style.cssText = 'position:absolute;visibility:hidden;left:-9999px;top:0;' +
+                          'min-height:0;height:auto;width:' + el.offsetWidth + 'px;';
+    el.parentNode.appendChild(probe);
+    var msgs = [];
+    ['loads', 'onsite', 'incoming'].forEach(function (sec) {
+      if (sec === 'incoming' && !POOL) return;
+      var x = noteSection(sec);
+      x.tips.forEach(function (t) {
+        msgs.push('<span class="sec">' + x.name + '</span><b>' + x.status + '</b>' +
+                  '<span class="tip">' + t + '</span>');
+      });
+    });
+    LOADS.forEach(function (l, i) { msgs.push(noteForLoad(i)); });
+    // The longest a load card's message can get, whatever is typed.
+    msgs.push('<span class="sec">Loads</span><b>00000 &middot; Pickup 00/00 00:00</b>' +
+              '<span class="need">Enter the new driver\'s name and details.<br>' +
+              'Enter the trailer already on site.<br>' +
+              'Enter the empty being dropped, or tick Bobtail.</span>');
+    var tallest = 0;
+    msgs.forEach(function (h) {
+      probe.innerHTML = h;
+      if (probe.offsetHeight > tallest) tallest = probe.offsetHeight;
+    });
+    el.parentNode.removeChild(probe);
+    // offsetHeight is the full box, so the height is set as the full box too.
+    if (tallest) { el.style.boxSizing = 'border-box'; el.style.height = tallest + 'px'; }
+  }
+  var noteResizeT = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(noteResizeT);
+    noteResizeT = setTimeout(noteReserve, 150);
+  });
+
   // Two frames, so the browser paints the hidden state before fading back in.
   function noteShow(fn) { requestAnimationFrame(function () { requestAnimationFrame(fn); }); }
   function noteSwap() {
@@ -2739,6 +2786,7 @@
     renderPendingTrailers();
     renderLoads();
     loadsNote();
+    noteReserve();
 
     var b = document.getElementById('send');
     b.disabled = false;
