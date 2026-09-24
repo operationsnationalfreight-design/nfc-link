@@ -286,6 +286,24 @@
     display: grid; gap: 8px; align-items: center;
     /* The date column also holds the calendar button, so it gets the room. */
     grid-template-columns: minmax(0,1fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,.6fr); }
+  /* PHONES: four columns do not fit, so each row stacks. Trailer across the
+     full width, then ETA date and time side by side, then the on-site tick.
+     The column headings go; the boxes say what they are. */
+  @media (max-width: 600px) {
+    .inchead { display: none !important; }
+    .er .ln, #incoming .inc {
+      grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
+      grid-template-areas: "load load" "tl tl" "date time" "os os";
+      row-gap: 8px; padding: 8px 0; }
+    .er .ln > .for, #incoming .inc > .osl { grid-area: load; }
+    #incoming .inc > .osl { grid-area: os; }
+    .er .ln > .tl, #incoming .inc > .tl { grid-area: tl; }
+    .er .ln > .dh, #incoming .inc > .dh { grid-area: date; }
+    .er .ln > .et2, #incoming .inc > .et2 { grid-area: time; }
+    #incoming .inc > .ostxt { grid-area: date / date / time / time; padding: 8px 2px; }
+    #incoming .inc { border-bottom: 1px solid #f0f0f0; }
+    .osl { font-size: 13px; }
+  }
   .inchead { font-size: 10.5px; text-transform: uppercase; color: #555;
              letter-spacing: .03em; padding: 2px 4px 4px;
              border-bottom: 1px solid #ddd; }
@@ -1076,23 +1094,14 @@
     return h;
   }
 
-  // Two things the card no longer repeats: a delivery date the "Delivering"
-  // bar above already says (the time stays), and the pickup yard for a carrier
-  // who only runs one site, which is every pickup they have.
-  function stopIso(d) {
-    var m = String(d || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    return m ? m[3] + '-' + m[1] + '-' + m[2] : String(d || '').slice(0, 10);
-  }
-  function stopHtml(s, barIso) {
-    var oneSite = siteNames().length === 1;
+  // Every stop in full, the same way on every card: what it is, then date
+  // and time, then where.
+  function stopHtml(s) {
     var out = '';
     s.forEach(function(x) {
-      var pick = /pickup/i.test(x.type || '');
-      var sameDay = !pick && barIso && stopIso(x.date) === barIso;
-      var when = sameDay ? (x.time || '') : (x.date + ' ' + (x.time || ''));
       out += '<div><b>' + esc(x.type.toUpperCase()) + '</b></div>' +
-             '<div class="leg"><div class="when">' + esc(when) + '</div>' +
-             (pick && oneSite ? '' : esc(x.city)) + '</div>';
+             '<div class="leg"><div class="when">' + esc(x.date) + ' ' + esc(x.time || '') +
+             '</div>' + esc(x.city) + '</div>';
     });
     return out;
   }
@@ -1253,7 +1262,7 @@
       }
 
       html += '<div class="split"><div class="left"><div class="stops">' +
-              stopHtml(l.stops, l.delv) + '</div></div><div class="right">';
+              stopHtml(l.stops) + '</div></div><div class="right">';
 
       // A departed load carries no note.
       //
