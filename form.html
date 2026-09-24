@@ -419,6 +419,11 @@
   #dead h2 { margin: 0 0 10px; font-size: 17px; color: #0d3320; }
   #dead p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; color: #555; }
   #dead .mail { font-size: 13px; }
+  /* Trailer number reminder: amber, calm, never blocking. In the incoming
+     grids the line spans the full row under the boxes. */
+  input.tlwarn { border-color: #d9a400 !important; background: #fffbea; }
+  .tlnote { grid-column: 1 / -1; font-size: 12px; color: #8a6d1f; margin: 2px 0 4px; }
+  @media (max-width: 600px) { .er .ln > .tlnote, #incoming .inc > .tlnote { grid-row: 5; } }
 </style>
 </head>
 <body>
@@ -758,7 +763,7 @@
              '" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
-             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
+             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)">' +
              dateBox('imd', '', md) +
              '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
@@ -882,7 +887,7 @@
     return '<div class="inc">' +
            '<label class="osl"><input type="checkbox" class="ios" ' +
            'onchange="onIncOnsite(this)">Already on site</label>' +
-           '<input class="tl" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
+           '<input class="tl" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)">' +
            dateBox('imd', '', '') +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
@@ -904,14 +909,24 @@
     }
     return '';
   }
+  // A reminder, never a block: an amber outline and one line under the box.
+  // Focus is left where the carrier puts it and nothing stops a submit.
+  function tlClear(el) {
+    el.classList.remove('tlwarn');
+    var n = el.parentNode.querySelector('.tlnote');
+    if (n) n.parentNode.removeChild(n);
+  }
   function tlCheck(el) {
+    tlClear(el);
     var v = String(el.value || '').trim();
-    el.setCustomValidity('');
     if (!/^\d+$/.test(v)) return;
     var ex = tlExample();
     if (!ex) return;
-    el.setCustomValidity('Enter the full trailer number, every letter and number (like ' + ex + ').');
-    el.reportValidity();
+    el.classList.add('tlwarn');
+    var note = document.createElement('div');
+    note.className = 'tlnote';
+    note.textContent = 'Include every letter and number, like ' + ex + '.';
+    el.parentNode.appendChild(note);        // after everything in the row: nothing moves
   }
 
   function onIncOnsite(box) {
@@ -1403,7 +1418,7 @@
                   '" data-mode="' + mode + '"' +
                   ((atYard || swapPend) ? ' style="display:none;"' : '') + '>' +
                   '<div class="tf tf-tl"><label class="tll">Trailer #</label>' +
-                  '<input class="ltl" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')" value="' +
+                  '<input class="ltl" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)" value="' +
                   esc(mode ? l.tl : '') + '">' +
                   (POOL ? '' :
                     '<label class="bobbox"><input type="checkbox" class="los" data-i="' + i +
@@ -1423,7 +1438,7 @@
                   '<input class="lcs" data-i="' + i + '" maxlength="4" autocomplete="off" ' +
                   'style="text-transform:uppercase">' +
                   '<label>Empty being dropped</label>' +
-                  '<input class="lemp" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="this.setCustomValidity(\'\')">' +
+                  '<input class="lemp" data-i="' + i + '" autocomplete="off" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)">' +
                   '<label class="bobbox"><input type="checkbox" class="lbob" data-i="' + i +
                   '" onchange="onBobtail(this)">Bobtail</label>' +
                   '</div></div>';
