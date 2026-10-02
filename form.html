@@ -285,7 +285,7 @@
   .inchead, .er .ln, #incoming .inc {
     display: grid; gap: 8px; align-items: center;
     /* The date column also holds the calendar button, so it gets the room. */
-    grid-template-columns: minmax(0,1fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,.6fr); }
+    grid-template-columns: minmax(0,1fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,.6fr) 42px; }
   /* PHONES: four columns do not fit, so each row stacks. Trailer across the
      full width, then ETA date and time side by side, then the on-site tick.
      The column headings go; the boxes say what they are. */
@@ -293,9 +293,10 @@
     .inchead { display: none !important; }
     .er .ln, #incoming .inc {
       grid-template-columns: minmax(0,1.4fr) minmax(0,1fr);
-      grid-template-areas: "load load" "tl tl" "date time" "os os";
+      grid-template-areas: "load x" "tl tl" "date time" "os os";
       row-gap: 8px; padding: 8px 0; }
-    .er .ln > .for, #incoming .inc > .osl { grid-area: load; }
+    .er .ln > .for, .er .ln > .rs, #incoming .inc > .osl { grid-area: load; }
+    .er .ln > .erx { grid-area: x; justify-self: end; }
     #incoming .inc > .osl { grid-area: os; }
     .er .ln > .tl, #incoming .inc > .tl { grid-area: tl; }
     .er .ln > .dh, #incoming .inc > .dh { grid-area: date; }
@@ -331,6 +332,22 @@
   /* Changed and not yet sent: the carrier can see what Submit will send. */
   .er.dirty { border-left-color: #d4a017; background: #fffaf0; }
   .er .pend { font-size: 11.5px; color: #8a6d1f; font-weight: 700; padding: 0 4px 4px; }
+  /* Remove (Oct 2). The X marks the row; nothing leaves until Submit, and the
+     X becomes Undo so a slip costs one tap. Reads like any other change
+     waiting to be sent: amber edge, values struck through. */
+  .er .erx { background: none; border: 0; padding: 4px 2px; min-height: 0;
+             color: #888; font-size: 15px; line-height: 1; cursor: pointer; }
+  .er .erx:hover { color: #c62828; }
+  .er .rs { display: none; font-size: 12px; color: #8a6d1f; font-weight: 700;
+            padding-left: 4px; }
+  .er.rm { border-left-color: #d4a017; background: #fffaf0; }
+  .er.rm .for { display: none; }
+  .er.rm .rs { display: block; }
+  .er.rm input { text-decoration: line-through; color: #999 !important;
+                 font-weight: normal !important; border-bottom-color: transparent; }
+  .er.rm .cal { visibility: hidden; }
+  .er.rm .erx { color: #0d3320; font-size: 12px; text-decoration: underline; }
+  .er .erx { justify-self: center; }
 
   /* Date and time pickers render taller than a text input on some browsers,
      which left the row ragged. */
@@ -573,6 +590,7 @@
   var POOL    = false;
   var PENDTL  = [];
   var HELD    = [];   // pool equipment on the way, from the carrier tab
+  var RMTL    = {};   // Incoming Trailers rows marked for removal, until Submit
   var INIT    = {};   // what each card was rendered with
 
   function esc(s) {
@@ -758,16 +776,25 @@
           esc(r.bol) + '"><b>' + esc(r.nfc) + '</b>' +
           (r.delv ? ' &middot; ' + esc(r.delv) : '') + '</div>'
         : '<div class="for un">Unassigned</div>';
+      load += '<div class="rs">Removing</div>';
 
-      return '<div class="er' + (etaPastDue(r.due) ? ' late' : '') +
+      // Marked for removal survives a background refresh redrawing the panel.
+      var rk = r.bol ? 'b:' + r.bol : 't:' + String(r.tl).toUpperCase();
+      var rm = !!RMTL[rk];
+
+      return '<div class="er' + (rm ? ' rm' : etaPastDue(r.due) ? ' late' : '') +
+             '" data-late="' + (etaPastDue(r.due) ? '1' : '') +
              '" data-bol="' + esc(r.bol) + '" data-nfc="' + esc(r.nfc) +
              '" data-otl="' + esc(r.tl) + '" data-oeta="' + esc(orig) + '">' +
              '<div class="ln">' + load +
-             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)">' +
+             '<input class="tl" value="' + esc(r.tl) + '" title="Trailer #, all letters and numbers" placeholder="All letters &amp; numbers" onblur="tlCheck(this)" oninput="tlClear(this)"' + (rm ? ' readonly' : '') + '>' +
              dateBox('imd', '', md) +
              '<input class="et2" type="text" inputmode="numeric" maxlength="5" ' +
              'placeholder="HH:MM" title="ETA time, 24 hour" oninput="onHHMM(this)" value="' +
-             esc(sp.time) + '">' +
+             esc(sp.time) + '"' + (rm ? ' readonly' : '') + '>' +
+             '<button type="button" class="erx" data-k="' + esc(rk) + '" onclick="erRemove(this)" ' +
+             'aria-label="' + (rm ? 'Keep this trailer' : 'Remove this trailer') + '">' +
+             (rm ? 'Undo' : '&#x2715;') + '</button>' +
              '</div>' +
              (pend ? '<div class="pend">Received, pending confirmation: ' + esc(pend.tl) +
                      (pend.eta ? ' &middot; ' + esc(etaShow(pend.eta)) : '') + '</div>' : '') +
@@ -781,15 +808,40 @@
   // back unmarks the row.
   document.addEventListener('input', function (ev) {
     var er = ev.target && ev.target.closest ? ev.target.closest('.er') : null;
-    if (!er) return;
+    if (!er || er.classList.contains('rm')) return;
     er.classList.remove('late');
+    erMark(er);
+  });
+
+  // Changed from what it was drawn with: the row Submit will send.
+  function erMark(er) {
     var tl  = er.querySelector('.tl').value.trim();
     var eta = etaJoin(mmdd(er.querySelector('.imd').value),
                       hhmm(er.querySelector('.et2').value));
     er.classList.toggle('dirty',
       tl !== (er.getAttribute('data-otl') || '') ||
       eta !== (er.getAttribute('data-oeta') || ''));
-  });
+  }
+
+  // X on an Incoming Trailers row (Oct 2). Marks it, or unmarks it, in place,
+  // so other edits in the panel are untouched. Sent with Submit, never alone.
+  function erRemove(b) {
+    var er = b.closest('.er');
+    if (!er) return;
+    var k = b.getAttribute('data-k');
+    var on = !RMTL[k];
+    if (on) RMTL[k] = true; else delete RMTL[k];
+    TOUCHED = true;
+    er.classList.toggle('rm', on);
+    er.querySelectorAll('input').forEach(function (i) { i.readOnly = on; });
+    b.innerHTML = on ? 'Undo' : '&#x2715;';
+    b.setAttribute('aria-label', on ? 'Keep this trailer' : 'Remove this trailer');
+    if (on) { er.classList.remove('dirty'); er.classList.remove('late'); }
+    else {
+      erMark(er);
+      if (er.getAttribute('data-late') && !er.classList.contains('dirty')) er.classList.add('late');
+    }
+  }
 
   // The label on an assigned row goes to its load, like a row in the onsite
   // panel. Delegated for the same reason: the panel is rebuilt on refresh.
@@ -2016,6 +2068,19 @@
       var otl  = r.getAttribute('data-otl') || '';
       var oeta = r.getAttribute('data-oeta') || '';
       var bol  = r.getAttribute('data-bol') || '';
+      // Marked with the X: removed, whatever was typed in it. A row on a load
+      // goes by BOL like the card's own remove; pool equipment by number.
+      if (r.classList.contains('rm')) {
+        if (bol) {
+          p.incoming = p.incoming.filter(function (x) { return x.bol !== bol; });
+          if (!p.removeTrailers.some(function (x) { return x.bol === bol; })) {
+            p.removeTrailers.push({ bol: bol, nfc: r.getAttribute('data-nfc') || '', tl: otl });
+          }
+        } else {
+          p.removeTrailers.push({ tl: otl });
+        }
+        return;
+      }
       var tl   = r.querySelector('.tl').value.trim();
       var pd   = mmdd(r.querySelector('.imd').value);
       var pt   = hhmm(r.querySelector('.et2').value);
@@ -2214,6 +2279,7 @@
           try {
             var mine = { data: payload, at: Date.now() };
             LOCALQ = LOCALQ.concat([mine]);
+            RMTL = {};
             applyQueued(LOADS, [mine]);
             renderAll();
             console.log('[form] applied locally',
@@ -2353,6 +2419,12 @@
         if (l && (l.driver || l.pendingDriver) && !l.pendingClear) live = true;
       });
       (d.removeTrailers || []).forEach(function (c) {
+        // Pool equipment: still ours to assert while the board still lists it.
+        if (!c.bol) {
+          var key = String(c.tl || '').toUpperCase();
+          if ((HELD || []).some(function (h) { return String(h.tl || '').toUpperCase() === key; })) live = true;
+          return;
+        }
         var l = find(c.bol);
         if (l && l.tl && !l.pendingTrailerClear) live = true;
       });
@@ -2497,6 +2569,13 @@
         if (hit) { hit.pendingClear = true; hit.pendingDriver = ''; }
       });
       (d.removeTrailers || []).forEach(function (c) {
+        if (!c.bol) {
+          // Pool equipment taken off Incoming Trailers stays off until promote
+          // clears it, so it never comes back while pending.
+          var key = String(c.tl || '').toUpperCase();
+          HELD = (HELD || []).filter(function (h) { return String(h.tl || '').toUpperCase() !== key; });
+          return;
+        }
         var hit = find(c.bol);
         if (hit) hit.pendingTrailerClear = true;
       });
