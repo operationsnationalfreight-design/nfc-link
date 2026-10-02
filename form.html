@@ -1002,7 +1002,7 @@
            '<button type="button" class="cal" tabindex="-1" title="Pick a date" ' +
            'onclick="openCal(this)">' + CAL_SVG + '</button>' +
            '<input type="date" class="calpick" tabindex="-1" aria-hidden="true" ' +
-           'onchange="calPicked(this)"></span>';
+           'min="' + todayValue() + '" onchange="calPicked(this)"></span>';
   }
   // Referenced by every MM/DD box and never defined until now, so typing
   // threw quietly and the slash never appeared. Digits in, MM/DD out.
@@ -1138,6 +1138,36 @@
   // other, so the page only compares an absolute time against now. Same grace
   // as the ETA chase, sent with the board so the two cannot drift apart.
   var ETA_GRACE_MIN = 30;
+  // PAST ETAS (Oct 2). Carriers were entering ETAs that had already gone by,
+  // a wrong day or a time from this morning, and the board then showed a
+  // trailer as late the moment it was saved. An ETA is judged in the YARD'S
+  // clock, with the same grace the late check uses, so a truck pulling in
+  // right now can still say so.
+  //   Zone: a load's own pickup state; for pool equipment, Central if any of
+  //   the carrier's yards is Morris, else Eastern.
+  function yardZoneFor(l) {
+    var pick = ((l && l.stops) || []).filter(function (x) { return /pickup/i.test(x.type || ''); })[0];
+    if (pick) {
+      var st = String(pick.city || '').toUpperCase()
+                 .match(/(?:,\s*|\s)([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$/);
+      return (st && STATE_TZ[st[1]]) || 'America/Chicago';
+    }
+    return siteNames().some(function (n) { return /Morris/i.test(n); })
+      ? 'America/Chicago' : 'America/New_York';
+  }
+  // True when MM/DD plus HH:MM, read in that zone, is already past.
+  function etaIsPast(md, hm, tz) {
+    var iso = mdToIso(md), t = String(hm || '').match(/^(\d{2}):(\d{2})$/);
+    if (!iso || !t) return false;
+    var p = iso.split('-');
+    var ms = zonedMs(+p[0], +p[1], +p[2], +t[1], +t[2], tz);
+    return Date.now() - ms > ETA_GRACE_MIN * 60000;
+  }
+  function pastMsg(tl, nfc) {
+    return 'The ETA for trailer ' + tl + (nfc ? ' on ' + nfc : '') +
+           ' has already passed. Enter when it will arrive.';
+  }
+
   function etaPastDue(dueMs) {
     return !!dueMs && Date.now() - dueMs > ETA_GRACE_MIN * 60000;
   }
@@ -2055,6 +2085,10 @@
         var etaChanged = te !== inputNorm(base.leta) && !(etaUnparsed && !te);
 
         if (t !== inputNorm(base.ltl) || etaChanged || (isLive && !l.live)) {
+          if (te && etaChanged && etaIsPast(ed, et, yardZoneFor(l))) {
+            problem = pastMsg(t, l.nfc);
+            return;
+          }
           p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: te, live: isLive });
         }
       }
@@ -2100,6 +2134,15 @@
         problem = 'Trailer ' + tl + ' needs both a date and a time for its ETA.';
         return;
       }
+      // Only a changed ETA is judged: an old one left untouched still shows
+      // red as late, and is not the carrier's mistake to fix right now.
+      if (eta !== oeta) {
+        var erl = bol ? (LOADS || []).filter(function (x) { return x.bol === bol; })[0] : null;
+        if (etaIsPast(pd, pt, yardZoneFor(erl))) {
+          problem = pastMsg(tl, r.getAttribute('data-nfc') || '');
+          return;
+        }
+      }
       // The load card already sent this load's trailer: the card wins, since
       // two rows for one BOL would leave the answer to timestamp order.
       if (bol && p.incoming.some(function (x) { return x.bol === bol; })) return;
@@ -2141,6 +2184,7 @@
                   ' needs both a date and a time for its ETA.';
         return;
       }
+      if (etaIsPast(pd, pt, yardZoneFor(null))) { problem = pastMsg(tl, ''); return; }
       p.incoming.push({ tl: tl, eta: etaJoin(pd, pt) });
     });
 
