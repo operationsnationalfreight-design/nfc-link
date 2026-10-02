@@ -1002,7 +1002,7 @@
   // The same rule the payload uses, deliberately. If the two disagreed, a
   // provisional load would either linger after the payload had written it off
   // or vanish while the payload still considered it live.
-  var DELV_GRACE_HOURS = 3;
+  var DELV_GRACE_HOURS = 1;   // One hour, not three: delivered loads stayed on as live cards for three hours.
 
   // The server sends delvDue, the instant of the last delivery in that stop's
   // own time zone, with every load it builds. Only a provisional copy pushed
