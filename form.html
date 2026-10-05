@@ -146,8 +146,7 @@
      button opens the browser's own date picker, which writes MM/DD back into
      the box, so typing and picking land in the same field. */
   .dh { display: flex; align-items: stretch; min-width: 0; position: relative; }
-  .dh input.mdx { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0;
-                  border-bottom-right-radius: 0; }
+  .dh input.mdx { flex: 1 1 auto; min-width: 0; }
   .dh .cal { flex: 0 0 30px; display: flex; align-items: center;
              justify-content: center; padding: 0; cursor: pointer;
              border: 1px solid #bfc5c2; border-left: 0; background: #f6f8f7;
@@ -284,8 +283,9 @@
      directly over the time it describes. */
   .inchead, .er .ln, #incoming .inc {
     display: grid; gap: 8px; align-items: center;
-    /* The date column also holds the calendar button, so it gets the room. */
-    grid-template-columns: minmax(0,1fr) minmax(0,.95fr) minmax(0,.85fr) minmax(0,.6fr) 42px; }
+    /* The date column holds the browser's own date box (mm/dd/yyyy and its
+       calendar icon), so it gets the room. */
+    grid-template-columns: minmax(0,.95fr) minmax(0,.9fr) minmax(138px,1fr) minmax(0,.55fr) 42px; }
   /* PHONES: four columns do not fit, so each row stacks. Trailer across the
      full width, then ETA date and time side by side, then the on-site tick.
      The column headings go; the boxes say what they are. */
@@ -995,14 +995,19 @@
     '<rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" ' +
     'stroke="currentColor" stroke-width="1.4"/><path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" ' +
     'stroke="currentColor" stroke-width="1.4" fill="none"/></svg>';
+  // PICKED, NOT TYPED (Oct 5). The typed MM/DD box read three digits as M/DD,
+  // so "105" meant for 10/5 became 01/05, and the nearest-year rule then put
+  // it next January, three months ahead, so the past check passed it: PFUT
+  // "2000 01/05" (4:12 PM) and NDLS 22019 "1200 01/05" (10:10 AM) on Oct 5.
+  // The date is now the browser's own date box: the phone's picker on a
+  // phone, month/day/year slots with the year in view on a desktop, past days
+  // greyed out. Nothing to misread. Its value is yyyy-mm-dd, which mmdd()
+  // turns into the MM/DD everything downstream already uses.
   function dateBox(cls, attrs, md) {
-    return '<span class="dh"><input class="' + cls + ' mdx" type="text" ' +
-           'inputmode="numeric" maxlength="5" placeholder="MM/DD" title="ETA date" ' +
-           'oninput="onMMDD(this)"' + (attrs || '') + ' value="' + esc(md || '') + '">' +
-           '<button type="button" class="cal" tabindex="-1" title="Pick a date" ' +
-           'onclick="openCal(this)">' + CAL_SVG + '</button>' +
-           '<input type="date" class="calpick" tabindex="-1" aria-hidden="true" ' +
-           'min="' + todayValue() + '" onchange="calPicked(this)"></span>';
+    var iso = md ? mdToIso(md) : '';
+    return '<span class="dh"><input class="' + cls + ' mdx" type="date" ' +
+           'title="ETA date" aria-label="ETA date" min="' + todayValue() + '"' +
+           (attrs || '') + ' value="' + esc(iso) + '"></span>';
   }
   // Referenced by every MM/DD box and never defined until now, so typing
   // threw quietly and the slash never appeared. Digits in, MM/DD out.
@@ -1118,6 +1123,9 @@
   }
 
   function mmdd(v) {
+    // A date box gives yyyy-mm-dd; the month and day are all an ETA carries.
+    var iso = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (iso) return iso[2] + '/' + iso[3];
     var d = String(v || '').replace(/[^\d]/g, '');
     if (d.length === 3) d = '0' + d;
     if (d.length !== 4) return '';
