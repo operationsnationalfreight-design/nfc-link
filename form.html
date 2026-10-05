@@ -1007,7 +1007,18 @@
     var iso = md ? mdToIso(md) : '';
     return '<span class="dh"><input class="' + cls + ' mdx" type="date" ' +
            'title="ETA date" aria-label="ETA date" min="' + todayValue() + '"' +
-           (attrs || '') + ' value="' + esc(iso) + '"></span>';
+           ' onclick="pickOpen(this)"' + (attrs || '') + ' value="' + esc(iso) + '"></span>';
+  }
+  // PICKER ON CLICK (Oct 5, Ross). On a desktop the date box only opened its
+  // calendar from the small icon, so a click in the box went straight to
+  // typing. A click anywhere in it now opens the calendar too. Typing still
+  // works with the calendar open. Mouse only: a phone already opens its own
+  // picker on a tap. A browser without showPicker, or one that refuses it,
+  // simply keeps the old behaviour.
+  function pickOpen(el) {
+    try {
+      if (el.showPicker && window.matchMedia && window.matchMedia('(pointer: fine)').matches) el.showPicker();
+    } catch (e) {}
   }
   // Referenced by every MM/DD box and never defined until now, so typing
   // threw quietly and the slash never appeared. Digits in, MM/DD out.
