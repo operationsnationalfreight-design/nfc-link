@@ -273,6 +273,33 @@
   table.on th.a, table.on td.a { width: 58%; }
   table.on tr.loaded td { background: #f4fbf5; }
   .tick { color: #2e7d32; font-weight: 700; }
+  /* RED TAG (1006l): a tagged trailer stays listed, cannot be picked, shows
+     its reason, and takes the carrier's repair or pickup plan. */
+  table.on tr.rt td { background: #fdf5f5; }
+  table.on tr.rt td.first { border-left: 4px solid #c62828; white-space: nowrap;
+                            padding-left: 3px; padding-right: 3px; }
+  .rtb { color: #c62828; font-weight: 700; }
+  table.on tr.rtplan td { background: #fdf5f5; text-align: left; padding: 2px 10px 12px 14px;
+                          border-left: 4px solid #c62828; }
+  .rtwhy { font-size: 12.5px; color: #333; margin-bottom: 8px; }
+  .rtask { color: #8a5a00; font-weight: 700; font-size: 12.5px; margin-bottom: 6px; }
+  .rtplanbox { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .rtplanbox select, .rtplanbox input { font: inherit; font-size: 13px; padding: 6px 7px; min-height: 36px;
+                                        border: 1px solid #bfc5c2; border-radius: 3px; background: #fff; }
+  .rtplanbox select { flex: 1 1 100%; }
+  .rtplanbox input.rtd { flex: 0 0 150px; width: 150px; }
+  .rtplanbox input.rtt { flex: 0 0 72px; width: 72px; }
+  .rtplanbox input.rtn { flex: 1 1 100%; }
+  .rtset { font-size: 12.5px; color: #2e7d32; font-weight: 700; }
+  .rtchg { font: inherit; font-size: 11.5px; color: #0d3320; text-decoration: underline; margin-left: 6px;
+           font-weight: normal; cursor: pointer; background: none; border: 0; padding: 0; }
+  .rtwait { font-size: 12.5px; color: #555; }
+  /* Same reset as .bobbox: the page's label style is the small uppercase
+     field caption, which spread this box across the row. */
+  .rtchk { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; cursor: pointer;
+           text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: normal;
+           color: #1c1c1c; white-space: normal; }
+  .rtchk input { width: auto; margin: 0; }
 
   .inc { display: flex; gap: 8px; margin-bottom: 7px; }
   /* En route rows: what the trailer is for on one line, the editable fields
@@ -591,6 +618,9 @@
   var PENDTL  = [];
   var HELD    = [];   // pool equipment on the way, from the carrier tab
   var RMTL    = {};   // Incoming Trailers rows marked for removal, until Submit
+  var RT_BUILD = 'redtag-1006l';
+  var RTEDIT  = {};   // red-tagged trailers whose plan is open for a change
+  var RTLOCAL = {};   // red tag plans WE sent, shown until the board carries them
   var INIT    = {};   // what each card was rendered with
 
   function esc(s) {
@@ -668,6 +698,7 @@
     var t = '<table class="on"><tr><th>Trailer</th><th class="a">Assigned To</th><th>Status</th></tr>';
     ONSITE.forEach(function(o) {
       var cell, state;
+      if (o.redTag) { t += rtRows(o); return; }
 
       if (o.isReturn) {
         // A return is not an assignment and not ready equipment. Saying
@@ -708,6 +739,92 @@
            '<td>' + state + '</td></tr>';
     });
     h.innerHTML = t + '</table>';
+  }
+
+  // RED TAG ROWS (1006l). The trailer row says RED TAG and is never
+  // pickable; the row under it gives the reason and asks for the plan:
+  // repair on site or pickup with a picked date and a typed HHMM time, or,
+  // for a trailer that left the yard, one box for "repaired". A plan we sent
+  // shows at once and stays until the board carries it.
+  function rtKey(tl) { return String(tl || '').trim().toUpperCase(); }
+  function rtView(o) {
+    var rt = {}, k = rtKey(o.tl), l = RTLOCAL[k];
+    Object.keys(o.redTag).forEach(function (x) { rt[x] = o.redTag[x]; });
+    if (l) {
+      if (rt.plan === l.plan && (rt.date || '') === (l.date || '') && (rt.time || '') === (l.time || '')) {
+        delete RTLOCAL[k];
+      } else {
+        rt.plan = l.plan; rt.date = l.date; rt.time = l.time; rt.note = l.note; rt.pending = true;
+        if (l.plan === 'REPAIR COMPLETED') rt.status = 'REPAIRED';
+        else if (rt.status !== 'LEFT YARD') rt.status = 'SCHEDULED';
+      }
+    }
+    return rt;
+  }
+  function rtMD(iso) { var m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? m[1] + '/' + m[2] : ''; }
+  function rtPlanWords(rt) {
+    var w = rt.plan === 'PICKUP' ? 'Pickup' : 'Repair on site';
+    return w + ' scheduled ' + rtMD(rt.date) + (rt.time ? ' ' + rt.time : '');
+  }
+  function rtRows(o) {
+    var rt = rtView(o), k = rtKey(o.tl);
+    var reason = String(rt.reason || '').replace(/[.\s]+$/, '');
+    var why = 'Red tag: ' + reason.charAt(0).toLowerCase() + reason.slice(1) + '.' +
+              (rt.at ? ' Tagged ' + rt.at + (rt.by === 'yard' ? ' by the yard.' : '.') : '');
+    var h = '<tr class="rt"><td class="first"><b>' + esc(o.tl) + '</b></td>' +
+            '<td class="a"><span style="color:#999">' + (rt.left ? 'left the yard' : 'not available to load') + '</span></td>' +
+            '<td><span class="rtb">RED TAG</span></td></tr>';
+    var body;
+    if (rt.status === 'REPAIRED') {
+      body = '<div class="rtset">Repair completed</div>' +
+             '<div class="rtwait">We will confirm with the yard and clear the red tag.</div>';
+    } else if (rt.left) {
+      body = '<div class="rtask">Please let us know when this trailer is repaired.</div>' +
+             '<label class="rtchk"><input type="checkbox" class="rtdone"> Repaired and back in service</label>';
+    } else if (rt.plan && !RTEDIT[k]) {
+      body = '<div class="rtset">' + esc(rtPlanWords(rt)) +
+             '<button type="button" class="rtchg" data-tl="' + esc(o.tl) + '" onclick="rtEdit(this)">change</button></div>';
+    } else {
+      var opt = function (v, label) { return '<option value="' + v + '"' + (rt.plan === v ? ' selected' : '') + '>' + label + '</option>'; };
+      body = (rt.plan ? '' : '<div class="rtask">Please schedule a repair or pickup for this trailer.</div>') +
+             '<div class="rtplanbox">' +
+             '<select class="rtsel"><option value="">Choose: repair on site or pickup</option>' +
+             opt('REPAIR ON SITE', 'Repair on site') + opt('PICKUP', 'Pickup') + opt('REPAIR COMPLETED', 'Repair completed') +
+             '</select>' +
+             '<input class="rtd" type="date" min="' + todayValue() + '" value="' + esc(rt.date || '') + '"' +
+             ' onclick="pickOpen(this)" aria-label="Repair or pickup date">' +
+             '<input class="rtt" inputmode="numeric" maxlength="5" placeholder="HHMM" value="' + esc(rt.time || '') + '"' +
+             ' oninput="onHHMM(this)" aria-label="Time">' +
+             '<input class="rtn" maxlength="300" placeholder="Note for us (repair vendor, driver)"' +
+             ' value="' + esc(rt.note || '') + '"></div>';
+    }
+    return h + '<tr class="rtplan" data-tl="' + esc(o.tl) + '"><td colspan="3"><div class="rtwhy">' + esc(why) + '</div>' + body + '</td></tr>';
+  }
+  function rtEdit(btn) { RTEDIT[rtKey(btn.getAttribute('data-tl'))] = true; TOUCHED = true; renderOnsite(); }
+  // What the red tag rows hold that differs from the board. Returns a
+  // problem string, or '' with p.redTagPlans filled.
+  function rtCollect(p) {
+    var problem = '';
+    var byKey = {};
+    (ONSITE || []).forEach(function (o) { if (o.redTag) byKey[rtKey(o.tl)] = rtView(o); });
+    Array.prototype.forEach.call(document.querySelectorAll('tr.rtplan[data-tl]'), function (row) {
+      if (problem) return;
+      var tl = row.getAttribute('data-tl'), cur = byKey[rtKey(tl)] || {};
+      var done = row.querySelector('.rtdone');
+      if (done) { if (done.checked) p.redTagPlans.push({ tl: tl, plan: 'REPAIR COMPLETED' }); return; }
+      var sel = row.querySelector('.rtsel');
+      if (!sel || !sel.value) return;
+      var plan = sel.value;
+      var date = (row.querySelector('.rtd') || {}).value || '';
+      var time = hhmm((row.querySelector('.rtt') || {}).value || '').replace(':', '');
+      var note = String((row.querySelector('.rtn') || {}).value || '').trim();
+      if (plan !== 'REPAIR COMPLETED' && !date) { problem = 'Pick the date for the ' + (plan === 'PICKUP' ? 'pickup' : 'repair') + ' of trailer ' + tl + '.'; return; }
+      if (plan !== 'REPAIR COMPLETED' && date < todayValue()) { problem = 'The date for trailer ' + tl + ' has passed. Pick today or later.'; return; }
+      if (plan === 'REPAIR COMPLETED') { date = ''; time = ''; }
+      if (plan === cur.plan && date === (cur.date || '') && time === (cur.time || '') && note === (cur.note || '')) return;
+      p.redTagPlans.push({ tl: tl, plan: plan, date: date, time: time, note: note });
+    });
+    return problem;
   }
 
   // TRAILERS ALREADY ON THE WAY, at the top of the Incoming Trailers card.
@@ -1907,7 +2024,7 @@
 
   function submitForm() {
     var p = { newDrivers: [], driverEdits: [], assignments: [], incoming: [],
-              removeDrivers: [], removeTrailers: [] };
+              removeDrivers: [], removeTrailers: [], redTagPlans: [] };
 
     Object.keys(DROPTL).forEach(function (bol) {
       var rl = (LOADS || []).filter(function (x) { return x.bol === bol; })[0];
@@ -2233,13 +2350,14 @@
       });
     }
 
+    if (!problem) problem = rtCollect(p);
     if (problem) {
       document.getElementById('status').innerHTML = '<span class="err">' + esc(problem) + '</span>';
       return;
     }
     if (!p.newDrivers.length && !p.driverEdits.length &&
         !p.assignments.length && !p.incoming.length &&
-        !p.removeDrivers.length && !p.removeTrailers.length) {
+        !p.removeDrivers.length && !p.removeTrailers.length && !p.redTagPlans.length) {
       document.getElementById('status').innerHTML = '<span class="err">Nothing to send yet.</span>';
       return;
     }
@@ -2344,6 +2462,10 @@
             LOCALQ = LOCALQ.concat([mine]);
             RMTL = {};
             applyQueued(LOADS, [mine]);
+            (payload.redTagPlans || []).forEach(function (rp) {
+              RTLOCAL[rtKey(rp.tl)] = { plan: rp.plan, date: rp.date || '', time: rp.time || '', note: rp.note || '' };
+              delete RTEDIT[rtKey(rp.tl)];
+            });
             renderAll();
             console.log('[form] applied locally',
                         JSON.stringify(payload).slice(0, 300));
