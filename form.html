@@ -1048,10 +1048,11 @@
   // carrier never chose, and the ETA is now required whenever a trailer is
   // named, so the default would have satisfied the rule on its own.
   //
-  // "Already on site" replaces the ETA with one more tick: "Not currently under
-  // NFCJ". Ticked, it is a SCAC swap (we ask ADC to move it to NFCJ). Left
-  // unticked, the carrier is only correcting a number or naming the trailer
-  // actually dropped: recorded as on site, nobody emailed.
+  // "Already on site" replaces the ETA with the words "On site". The tick
+  // "Not currently under NFCJ" is gone (1015j): carriers ticked it twice in
+  // three weeks, and a trailer reported on site that Kaleris did not show
+  // under NFCJ went unnoticed (120933, Oct 15). Kaleris decides now: one not
+  // under NFCJ within 15 minutes is asked of ADC (ScacSwap.gs).
   function incRow() {
     return '<div class="inc">' +
            '<label class="osl"><input type="checkbox" class="ios" ' +
@@ -1060,8 +1061,7 @@
            dateBox('imd', '', '') +
            '<input class="et2 hhmm" type="text" inputmode="numeric" ' +
            'maxlength="5" placeholder="HH:MM" title="ETA time, 24 hour" ' +
-           'oninput="onHHMM(this)"><span class="ostxt"><label class="osl">' +
-           '<input type="checkbox" class="ioswap">Not currently under NFCJ</label></span></div>';
+           'oninput="onHHMM(this)"><span class="ostxt">On site</span></div>';
   }
   // TRAILER NUMBERS: every letter and number. Carriers were typing "618" for
   // "25V618". If what they typed is numbers only while their own trailers on
@@ -1617,8 +1617,8 @@
         //
         // Live-load carrier: they supply every trailer, so trailer and ETA are
         // always on the card. "Already on site" swaps the ETA for the SCAC the
-        // trailer sits under today and the empty being dropped, and we ask ADC
-        // to change it to NFCJ.
+        // trailer sits under today and the empty being dropped; if Kaleris does
+        // not show it under NFCJ within 15 minutes, ADC is asked (1015j).
         //
         // Offered only while it is still open: not on anything loaded or
         // rolling, and on a pool card not once we have assigned a trailer or
@@ -1650,8 +1650,6 @@
                   'data-i="' + i + '" value="' + esc(sp0.time) + '">' +
                   '</div></div>' +
                   '<div class="tf tf-os">' +
-                  '<label class="bobbox"><input type="checkbox" class="lswap" data-i="' + i +
-                  '">Not currently under NFCJ</label>' +
                   '<label>Current SCAC <span class="opt">optional</span></label>' +
                   '<input class="lcs" data-i="' + i + '" maxlength="4" autocomplete="off" ' +
                   'style="text-transform:uppercase">' +
@@ -2191,9 +2189,8 @@
             problem = 'Enter the empty being dropped for ' + l.nfc + ', or tick Bobtail.';
             return;
           }
-          var lsw = document.querySelector('.lswap[data-i="' + i + '"]');
           p.incoming.push({ bol: l.bol, nfc: l.nfc, tl: t, eta: 'ON SITE', onsite: true,
-                            swap: !!(lsw && lsw.checked),
+                            swap: false,          // 1015j: no tick; Kaleris decides
                             cur: v('lcs', i).toUpperCase(),
                             empty: bobtail ? 'bobtail' : emp });
           return;
@@ -2301,12 +2298,11 @@
       // A row is only a row once it names a trailer.
       if (!tl) return;
 
-      // On site: no ETA, and no SCAC asked here. The pool entry reads
-      // "12345 - SCAC SWAP" until the yard moves it to NFCJ.
+      // On site: no ETA, and no SCAC asked here. Kaleris decides whether ADC
+      // is asked to move it to NFCJ (1015j).
       var os = r.querySelector('.ios');
       if (os && os.checked) {
-        var sw = r.querySelector('.ioswap');
-        p.incoming.push({ tl: tl, eta: 'ON SITE', onsite: true, swap: !!(sw && sw.checked) });
+        p.incoming.push({ tl: tl, eta: 'ON SITE', onsite: true, swap: false });   // 1015j: Kaleris decides
         return;
       }
       var pd = mmdd(r.querySelector('.imd').value);
