@@ -468,6 +468,8 @@
   input.tlwarn { border-color: #d9a400 !important; background: #fffbea; }
   .tlnote { grid-column: 1 / -1; font-size: 12px; color: #8a6d1f; margin: 2px 0 4px; }
   @media (max-width: 600px) { .er .ln > .tlnote, #incoming .inc > .tlnote { grid-row: 5; } }
+  /* 1111a (DAV06): an ETA after the load's pickup, amber, never blocking. */
+  .etanote { font-size: 12px; color: #8a6d1f; margin: 4px 0 2px; }
 </style>
 </head>
 <body>
@@ -1304,6 +1306,38 @@
            ' has already passed. Enter when it will arrive.';
   }
 
+  // 1111a (DAV06, Dave Nov 11): an ETA later than the load's first pickup
+  // (S1029544 read "1530 11/12" for a 1600 11/11 pickup). Both are the yard's
+  // own time, so they compare as written. A reminder under the ETA, never a
+  // block; it clears as soon as the ETA is on or before the pickup.
+  function pickOf(l) {
+    var p = ((l && l.stops) || []).filter(function (x) { return /pickup/i.test(x.type || ''); })[0];
+    if (!p || !p.date || !p.time) return null;
+    var m = String(p.date).match(/^(\d{2})\/(\d{2})\/(\d{4})$/), ymd = null;
+    if (m) ymd = m[3] + '-' + m[1] + '-' + m[2];
+    else { m = String(p.date).match(/^(\d{4})-(\d{2})-(\d{2})$/); if (m) ymd = m[0]; }
+    var t = String(p.time).match(/^(\d{1,2}):?(\d{2})$/);
+    if (!ymd || !t) return null;
+    var hm = ('0' + t[1]).slice(-2) + t[2];
+    return { key: ymd + ' ' + hm, text: ymd.slice(5, 7) + '/' + ymd.slice(8, 10) + ' ' + hm };
+  }
+  function etaPickCheck(el) {
+    var i = el.getAttribute('data-i'), l = (LOADS || [])[+i];
+    var box = el.closest('.tf-eta');
+    if (!box) return;
+    var old = box.querySelector('.etanote');
+    if (old) old.parentNode.removeChild(old);
+    var pk = pickOf(l);
+    var d = box.querySelector('.letad'), t = box.querySelector('.letat');
+    var iso = String((d && d.value) || ''), hm = hhmm(t && t.value);
+    if (!pk || !/^\d{4}-\d{2}-\d{2}$/.test(iso) || !hm) return;
+    if (iso + ' ' + hm.replace(':', '') <= pk.key) return;
+    var note = document.createElement('div');
+    note.className = 'etanote';
+    note.textContent = 'This is after the pickup (' + pk.text + '). Please check the date.';
+    box.appendChild(note);
+  }
+
   function etaPastDue(dueMs) {
     return !!dueMs && Date.now() - dueMs > ETA_GRACE_MIN * 60000;
   }
@@ -1644,9 +1678,9 @@
                   '</div>' +
                   '<div class="tf tf-eta"><label>ETA to shipper</label>' +
                   '<div class="etarow">' +
-                  dateBox('letad', ' data-i="' + i + '"', isoToMD(sp0.date)) +
+                  dateBox('letad', ' data-i="' + i + '" onchange="etaPickCheck(this)"', isoToMD(sp0.date)) +
                   '<input class="letat hhmm" type="text" inputmode="numeric" ' +
-                  'maxlength="5" placeholder="HH:MM" oninput="onHHMM(this)" ' +
+                  'maxlength="5" placeholder="HH:MM" oninput="onHHMM(this);etaPickCheck(this)" ' +
                   'data-i="' + i + '" value="' + esc(sp0.time) + '">' +
                   '</div></div>' +
                   '<div class="tf tf-os">' +
@@ -3070,7 +3104,7 @@
         // normal case is one fallback followed by a return to the edge as soon
         // as anything pushes.
         // AND THE AGE, which is the half I left out.
-        //
+        //
         // Setting LAST_EDGE without LAST_AGE achieved nothing: the next poll
         // tests both, saw the old age still past the window, and fell back
         // again. Every poll, forever, which is the thirty second rhythm that
