@@ -44,6 +44,10 @@
           // "expired" is a real answer and means the token is dead: going to
           // Apps Script would only get the same verdict more slowly.
           if (p && p.error === 'expired') return p;
+          // 1116-UPD03: a shut-off phone link is a real answer too, and a phone link's
+          // Apps Script fallback goes with ft, the ordinary short link the edge minted.
+          if (p && p.error === 'inactive') return p;
+          if (p && p.ft) return _appsScript(p.ft).then(function (j) { if (j && !j.ft) j.ft = p.ft; return j; });
           return _appsScript(_t);
         })
         .catch(function () { return _appsScript(_t); });
@@ -583,6 +587,9 @@
   // expires on its own, so there is nothing to log in to and nothing else to
   // hold. Read exactly as it arrived: one altered character makes it invalid.
   var TOKEN = new URLSearchParams(location.search).get('t') || '';
+  // 1116-UPD03: Apps Script never accepts a phone link, so its calls carry ft from the edge when one came.
+  var ATOKEN = TOKEN;
+  var FKAT = '';         // when the FourKites report on this board was read (ISO), '' when none
   var TOUCHED = false;   // set the moment the carrier edits anything
 
   // The shipment a loaded notification pointed at, if this link came from one.
@@ -1410,6 +1417,30 @@
     return days[dt.getDay()] + ' ' + iso;
   }
 
+  // 1116-UPD03: FourKites status on the form. The edge sends l.fk.w (Tracking,
+  // Not tracking or Not started) and fkAt only on a page switch fkform opens,
+  // so every other page renders as before. Hidden once the report is over 30
+  // minutes old, however long the page has been open.
+  var FK_STALE_MS = 30 * 60000;
+  var FK_COLOR = { 'Tracking': '#2e7d32', 'Not tracking': '#c62828', 'Not started': '#777777' };
+  function fkFresh() {
+    var t = FKAT ? Date.parse(FKAT) : NaN;
+    return !isNaN(t) && Date.now() - t <= FK_STALE_MS;
+  }
+  function fkWord(l) {
+    var w = l && l.fk && l.fk.w;
+    return w && FK_COLOR[w] && fkFresh() ? w : '';
+  }
+  function fkLine(l) {
+    var w = fkWord(l);
+    return '<div class="fkline" style="font-size:12.5px;margin:3px 0 2px">FourKites: <b style="color:' + FK_COLOR[w] + '">' + esc(w) + '</b></div>';
+  }
+  function fkAsOf() {
+    var hm = '';
+    try { hm = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Date.parse(FKAT))); } catch (e) {}
+    return '<div class="fkasof" style="font-size:12px;color:#555;text-align:right;margin:0 0 6px">FourKites status as of ' + esc(hm) + ' CT</div>';
+  }
+
   function renderLoads() {
     INIT = {};
     var host = document.getElementById('loads');
@@ -1418,6 +1449,8 @@
       return;
     }
     var html = '', lastDate = null, first = true;
+    // 1116-UPD03: FourKites status, only when the edge sent it and the report is under 30 minutes old.
+    if (fkFresh() && LOADS.some(function (l) { return fkWord(l); })) html += fkAsOf();
 
     LOADS.forEach(function(l, i) {
       if (l.delv !== lastDate) {
@@ -1534,6 +1567,7 @@
         html += '<div class="lnum2">' + tag +
                 (tag && stat ? ' &middot; ' : '') + stat + '</div>';
       }
+      if (fkWord(l)) html += fkLine(l);
       // EVERYTHING PENDING ON THIS LOAD, IN ORDER.
       //
       // The card used to carry one flag per kind, so assigning a driver and
@@ -2446,7 +2480,7 @@
       : API;
     var body = useEdge
       ? JSON.stringify({ data: payload })
-      : JSON.stringify({ api: 'submit', t: TOKEN, data: payload });
+      : JSON.stringify({ api: 'submit', t: ATOKEN, data: payload });
 
     fetch(target, {
       method: 'POST',
@@ -2530,6 +2564,8 @@
   // needs reloading anyway: re-fetch the payload and re-render in place.
   function applyPayload(p) {
     p = p || {};
+    if (p.ft) ATOKEN = p.ft;
+    FKAT = p.fkAt || '';
 
     // Remember any provisional loads, and put back ones a later payload
     // dropped. An Apps Script read has no idea these exist.
@@ -2899,9 +2935,11 @@
           .then(function (q) {
             if (q && q.ok) return q;
             if (q && q.error === 'expired') return q;
-            return fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(TOKEN),
+            if (q && q.error === 'inactive') return q;
+            return fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent((q && q.ft) || ATOKEN),
                          { method: 'GET', redirect: 'follow' })
-                     .then(function (r) { return r.json(); });
+                     .then(function (r) { return r.json(); })
+                     .then(function (j) { if (j && q && q.ft && !j.ft) j.ft = q.ft; return j; });
           });
     window.BOARD = null;
     p
@@ -3088,7 +3126,7 @@
     // Straight to Apps Script, deliberately. This call exists to get the
     // authoritative answer, and asking a cache whether the cache is right
     // would defeat the entire point of asking.
-    fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(TOKEN),
+    fetch(API + '?api=payload&fresh=1&t=' + encodeURIComponent(ATOKEN),
           { method: 'GET', redirect: 'follow' })
       .then(function (r) { return r.json(); })
       .then(function (p) {
@@ -3153,6 +3191,7 @@
     fetch(EDGE + '/payload?t=' + encodeURIComponent(TOKEN), { method: 'GET' })
       .then(function (r) { return r.json(); })
       .then(function (p) {
+        if (p && p.error === 'inactive') { showDead('inactive'); return; }   // 1116-UPD03: shut off while open
         if (!p || !p.ok) return;
         LAST_AGE = p.age || 0;
 
@@ -3227,6 +3266,13 @@
 
   // One place for every dead end, so a carrier never sees a raw error.
   function showDead(kind, detail) {
+    // 1116-UPD03: a phone link NFC shut off shows this one sentence and nothing else.
+    if (kind === 'inactive') {
+      if (typeof finishBar === 'function') { try { finishBar(); } catch (e) {} }
+      document.body.innerHTML = '<p style="font-family:Arial,sans-serif;font-size:17px;margin:40px 20px;text-align:center">' +
+        'This link is no longer active. Contact NFC for a new link.</p>';
+      return;
+    }
     var m = {
       missing:     ['This link is incomplete',
                     'The code on the end of it is missing, usually because an ' +
@@ -3294,6 +3340,8 @@
     pay: ['FourKites tracking stays on through delivery.', 'The driver arrived on time for the appointment.',
           'The receiver signs and dates the BOL with the driver’s in and out times.', 'The signed BOL is sent to NFC.'],
     sendDet: 'Send detention alert',
+    fkNotHead: 'FOURKITES IS NOT TRACKING THIS LOAD',
+    fkNot: 'Detention needs live tracking. Have the driver open FourKites CarrierLink and tap Start Tracking now.',
     sending: 'Sending...',
     failed: 'Not sent. Try again, or call NFC at (423) 667-2436.',
     sentTitle: 'Sent to NFC',
@@ -3338,7 +3386,11 @@
 
   // The loads, by appointment.
   function updLoads() {
-    return (LOADS || []).map(function (l) {
+    // 1116-UPD03: plus upd.late, the loads the board let go 1 hour after the appointment, kept here to 8 hours.
+    var have = {};
+    (LOADS || []).forEach(function (l) { if (l && l.bol) have[String(l.bol).toUpperCase()] = true; });
+    var late = ((UPD && UPD.late) || []).filter(function (l) { return l && l.bol && !have[String(l.bol).toUpperCase()]; });
+    return (LOADS || []).concat(late).map(function (l) {
       var d = updDel(l);
       var day = updDayOf(d ? d.date : '');
       return { l: l, d: d, key: day.key + ('0000' + (d ? updMin(d.time) : 9999)).slice(-4), day: day.day, md: day.md,
@@ -3467,6 +3519,7 @@
     var ls = updLoads(), st = updState(), h = '', lastDay = null;
     h += '<div class="updtop"><h2>' + esc(UPD_T.listTitle) + '</h2><button class="updx" onclick="updClose()">' + esc(UPD_T.close) + '</button></div>' +
          '<p class="updhint">' + esc(UPD_T.listHint) + '</p>';
+    if (fkFresh() && ls.some(function (x) { return fkWord(x.l); })) h += fkAsOf();
     ls.forEach(function (x) {
       var dk = x.day ? x.day + ' ' + x.md : UPD_T.noAppt;
       if (dk !== lastDay) { h += '<div class="upddayh">' + esc(dk) + '</div>'; lastDay = dk; }
@@ -3483,6 +3536,7 @@
       (x.city ? '<div class="updcity">' + esc(x.city) + '</div>' : '') +
       (l.tl ? '<div class="updcity">' + esc(updFill(UPD_T.trailer, { tl: l.tl })) + '</div>' : '') +
       (l.driver ? '<div class="upddrv">' + esc(l.driver) + '</div>' : '') +
+      (fkWord(l) ? fkLine(l) : '') +
       (s && s.last ? '<div class="updnote">' + esc(s.tbd ? UPD_T.itemTbd : updItemText(s.last)) + '</div>' : '');
   }
   function updFind(bol) { return updLoads().filter(function (x) { return x.l.bol === bol; })[0] || null; }
@@ -3513,6 +3567,8 @@
       h += '<p class="updtbdnote">' + esc(UPD_T.tbdNote) + '</p>';
     } else {
       h += '<div class="updbanner">' + esc(am >= 0 ? updFill(UPD_T.banner, { hm: updHm(am + 120) }) : UPD_T.bannerNoAppt) + '</div>';
+      // 1116-UPD03: detention is paid only on a tracked load; a warning, never a block on Send.
+      if (fkWord(x.l) === 'Not tracking') h += '<div class="updfknot" style="border:2px solid #c62828;background:#fdecea;color:#9a2b2b;border-radius:5px;padding:10px 12px;margin:10px 0;font-size:14px"><b style="display:block;margin-bottom:4px">' + esc(UPD_T.fkNotHead) + '</b>' + esc(UPD_T.fkNot) + '</div>';
       h += '<div class="updfield"><label for="updarr"><b>' + esc(UPD_T.arrived) + '</b></label><input id="updarr" inputmode="numeric" maxlength="5" placeholder="' + esc(UPD_T.otherPh) + '" value="' + esc(v.arrived) + '" oninput="updArr(this.value)"></div>';
     }
     h += '<div class="updh">' + esc(UPD_T.reasonHead) + '</div><div class="updopts two">' +
