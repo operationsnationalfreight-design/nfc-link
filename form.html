@@ -2595,6 +2595,8 @@
 
     applyQueued(p.loads || [], p.queued);
     renderAll();
+    // 1116-UPD02: the update section, only when the board carries it (UPD_T block below).
+    try { if (p.upd && window.updPaint) updPaint(p); else if (window.updGone) updGone(); } catch (e) {}
   }
 
   // What the edge reports, plus anything we sent that it has not caught up on.
@@ -3247,6 +3249,347 @@
       '<h2>' + esc(m[0]) + '</h2><p>' + esc(m[1]) + '</p>' +
       '<p class="mail"><a href="mailto:nfc@nationalfreightconnection.com">' +
       'nfc@nationalfreightconnection.com</a></p>';
+  }
+</script><script>
+  // 1116-UPD02: "Update a shipment". A late truck or a driver stuck at a
+  // receiver's door used to need a call or an email, and NFC wrote GE by hand.
+  // This section sends it from here, through /submit like everything else.
+  // It exists only when the board carries an upd field, which the edge adds
+  // only for a carrier its switch opens, so every other page is exactly as it
+  // was: no element, no style and no listener is added for them.
+  // Every word the carrier reads is in UPD_T, so the wording changes here only.
+  var UPD_T = {
+    cardTitle: 'Update a shipment',
+    countLine: '{n} upcoming deliveries. Next: {day} {md} at {hm}.',
+    countOne: '1 upcoming delivery. Next: {day} {md} at {hm}.',
+    countNone: 'No upcoming deliveries on file.',
+    open: 'Report a delay',
+    sentToday: 'Sent today',
+    listTitle: 'Upcoming deliveries',
+    listHint: 'Tap the load that is running late',
+    close: 'Close',
+    back: 'Back',
+    trailer: 'Trailer {tl}',
+    late: 'Delayed delivery',
+    unload: 'Delayed unload',
+    noAppt: 'No appointment on file',
+    newEta: 'NEW ETA',
+    other: 'Other time',
+    otherPh: 'HH:MM',
+    tbd: 'ETA not known yet',
+    tbdNote: 'We will tell the customer the ETA is to follow. Come back and add it as soon as the driver is rolling.',
+    reasonHead: 'REASON (REQUIRED)',
+    lateReasons: ['Traffic', 'Weather', 'Breakdown', 'Hours of service'],
+    unloadReasons: ['Waiting on a door', 'Slow unload', 'Receiver closed', 'Product issue'],
+    sendEta: 'Send to NFC: new ETA {hm}',
+    sendTbd: 'Send to NFC: ETA to follow',
+    sendPlain: 'Send to NFC',
+    needReason: 'Pick a reason to send.',
+    needEta: 'Pick a new ETA, or ETA not known yet.',
+    needArrived: 'Enter the time the driver arrived.',
+    banner: 'DETENTION ALERT. Send this before {hm}, 2 hours after the appointment. NFC will work with the receiver to get the driver moving.',
+    bannerNoAppt: 'DETENTION ALERT. Send this within 2 hours of the appointment. NFC will work with the receiver to get the driver moving.',
+    arrived: 'Driver arrived at',
+    payHead: 'To be paid detention',
+    pay: ['FourKites tracking stays on through delivery.', 'The driver arrived on time for the appointment.',
+          'The receiver signs and dates the BOL with the driver’s in and out times.', 'The signed BOL is sent to NFC.'],
+    sendDet: 'Send detention alert',
+    sending: 'Sending...',
+    failed: 'Not sent. Try again, or call NFC at (423) 667-2436.',
+    sentTitle: 'Sent to NFC',
+    sentNote: 'NFC has the update. No call or email needed.',
+    another: 'Update another delivery',
+    done: 'Done',
+    itemEta: 'Delayed delivery sent {at}: new ETA {hm}',
+    itemTbd: 'Delayed delivery, ETA to follow. Add the ETA when known.',
+    itemUnload: 'Detention alert sent {at}: arrived {hm}',
+    whatEta: 'Delayed delivery, new ETA {hm}, {reason}',
+    whatTbd: 'Delayed delivery, ETA to follow, {reason}',
+    whatUnload: 'Detention alert, driver arrived {hm}, {reason}',
+    days: ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
+  };
+  var UPD = null;        // the board's upd field
+  var UPDLOCAL = [];     // updates sent from this page, until the board lists them
+  var UPDV = null;       // the screen being filled: {kind, bol, eta, tbd, other, arrived, reason, uid, busy}
+
+  function updFill(s, v) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return v[k] !== undefined ? v[k] : m; }); }
+  function updDel(l) { return (l.stops || []).filter(function (s) { return /delivery/i.test(String(s.type || '')); })[0] || null; }
+  function updMin(hm) { var m = String(hm || '').match(/^(\d{1,2}):(\d{2})$/); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; }
+  function updHm(min) { min = ((min % 1440) + 1440) % 1440; return ('0' + Math.floor(min / 60)).slice(-2) + ':' + ('0' + (min % 60)).slice(-2); }
+  function updTyped(v) {
+    var m = String(v || '').trim().match(/^([01]?\d|2[0-3]):?([0-5]\d)$/);
+    return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : '';
+  }
+  function updDayOf(date) {
+    var m = String(date || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return { key: '9999', day: '', md: '' };
+    var d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+    return { key: m[3] + m[1] + m[2], day: UPD_T.days[d.getDay()], md: m[1] + '/' + m[2] };
+  }
+  function updUid() { return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function updCt(ms) {
+    try { return new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms)) + ' CT'; }
+    catch (e) { return ''; }
+  }
+  function updCtDay(ms) {
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms)); }
+    catch (e) { return ''; }
+  }
+
+  // The loads, by appointment.
+  function updLoads() {
+    return (LOADS || []).map(function (l) {
+      var d = updDel(l);
+      var day = updDayOf(d ? d.date : '');
+      return { l: l, d: d, key: day.key + ('0000' + (d ? updMin(d.time) : 9999)).slice(-4), day: day.day, md: day.md,
+               hm: d ? d.time : '', city: d ? String(d.city || '') : '' };
+    }).sort(function (a, b) { return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+  }
+  function updItems() {
+    var all = ((UPD && UPD.items) || []).slice(), have = {};
+    all.forEach(function (x) { have[x.uid] = true; });
+    UPDLOCAL.forEach(function (x) { if (!have[x.uid]) all.push(x); });
+    return all.sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+  }
+  // The newest line for each load, and whether its ETA is still to follow.
+  function updState() {
+    var by = {};
+    updItems().forEach(function (x) {
+      var s = by[x.bol] = by[x.bol] || { last: null, tbd: false };
+      s.last = x;
+      if (x.kind === 'late') s.tbd = !!x.tbd;
+    });
+    return by;
+  }
+  function updItemText(x) {
+    if (x.kind === 'late' && x.tbd) return UPD_T.itemTbd;
+    if (x.kind === 'late') return updFill(UPD_T.itemEta, { at: updCt(x.at), hm: x.eta });
+    return updFill(UPD_T.itemUnload, { at: updCt(x.at), hm: x.arrived });
+  }
+
+  function updCss() {
+    if (document.getElementById('updcss')) return;
+    var s = document.createElement('style');
+    s.id = 'updcss';
+    s.textContent =
+      '#updcard{border-left:5px solid #f3901d}' +
+      '#updcard .updline{margin:2px 0 10px;font-size:14px}' +
+      '.updbig{display:block;width:100%;font:inherit;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:5px;background:#0d3320;color:#fff;cursor:pointer}' +
+      '.updsent{margin-top:10px;font-size:13px}.updsent div{padding:6px 0;border-top:1px solid #eee}' +
+      '.updtbd{color:#8a6d1f;font-weight:600;cursor:pointer;text-decoration:underline}' +
+      '#updpanel{display:none;position:fixed;inset:0;background:#eef1ef;z-index:50;overflow-y:auto;-webkit-overflow-scrolling:touch}' +
+      '#updpanel.on{display:block}' +
+      '#updpanel .in{max-width:560px;margin:0 auto;padding:12px 12px 40px}' +
+      '.updtop{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}' +
+      '.updtop h2{margin:0;font-size:18px;color:#0d3320}' +
+      '.updx{font:inherit;font-size:14px;padding:8px 14px;border:1px solid #bfc5c2;border-radius:4px;background:#fff;cursor:pointer}' +
+      '.updhint{font-size:13px;color:#666;margin:0 0 10px}' +
+      '.upddayh{text-align:center;font-size:15px;font-weight:700;letter-spacing:.6px;margin:16px 0 8px;color:#0d3320}' +
+      '.updload{background:#fff;border:1px solid #d8dcda;border-radius:5px;padding:12px;margin-bottom:10px}' +
+      '.updtime{font-size:24px;font-weight:700;color:#0d3320;line-height:1.1}' +
+      '.updref{font-size:14px;margin-top:2px}.updcity{font-size:14px;color:#444}' +
+      '.upddrv{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+      '.updnote{font-size:13px;color:#8a6d1f;margin-top:4px}' +
+      '.updbtns{display:flex;gap:8px;margin-top:10px}' +
+      '.updbtns button{flex:1 1 0;font:inherit;font-size:15px;font-weight:600;padding:12px 6px;border-radius:5px;cursor:pointer;border:1px solid #0d3320;background:#fff;color:#0d3320}' +
+      '.updbtns button.det{border-color:#9a2b2b;color:#9a2b2b}' +
+      '.updh{font-size:12px;font-weight:700;letter-spacing:.6px;color:#0d3320;margin:16px 0 6px}' +
+      '.updopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}' +
+      '.updopts.two{grid-template-columns:repeat(2,1fr)}' +
+      '.updopt{font:inherit;font-size:15px;padding:12px 4px;border:1px solid #bfc5c2;border-radius:5px;background:#fff;cursor:pointer;text-align:center}' +
+      '.updopt small{display:block;font-size:12px;color:#666}' +
+      '.updopt.on{border-color:#0d3320;background:#0d3320;color:#fff}.updopt.on small{color:#dfe9e3}' +
+      '.updfield{display:flex;align-items:center;gap:8px;margin-top:8px}' +
+      '.updfield label{font-size:14px;flex:0 0 auto}' +
+      '.updfield input{flex:1 1 auto;min-width:0;font:inherit;font-size:18px;padding:10px;border:1px solid #bfc5c2;border-radius:5px}' +
+      '.updtbdnote{font-size:13px;color:#555;margin:6px 0 0}' +
+      '.updbanner{background:#9a2b2b;color:#fff;font-weight:700;padding:12px;border-radius:5px;margin:10px 0;font-size:14px}' +
+      '.updpay{background:#fff8e6;border:1px solid #e6cf8f;border-radius:5px;padding:10px 12px;margin-top:14px;font-size:13px}' +
+      '.updpay b{display:block;margin-bottom:4px}.updpay ul{margin:0;padding-left:18px}' +
+      '.updsend{display:block;width:100%;margin-top:16px;font:inherit;font-size:17px;font-weight:700;padding:14px;border:0;border-radius:5px;background:#0d3320;color:#fff;cursor:pointer}' +
+      '.updsend:disabled{background:#9aa7a0;cursor:default}' +
+      '.updwhy{font-size:13px;color:#666;margin-top:6px;text-align:center}' +
+      '.upderr{font-size:14px;color:#9a2b2b;margin-top:8px;text-align:center}' +
+      '.updok{text-align:center;padding:20px 8px}.updok .tick{font-size:42px;color:#2e7d32}' +
+      '.updok h2{margin:6px 0 10px;color:#0d3320}.updok p{margin:6px 0;font-size:15px}';
+    document.head.appendChild(s);
+  }
+
+  // The card at the top of the form.
+  function updPaint(p) {
+    UPD = p.upd;
+    updCss();
+    var card = document.getElementById('updcard');
+    if (!card) {
+      card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'updcard';
+      var cols = document.querySelector('#app .cols');
+      cols.parentNode.insertBefore(card, cols);
+      var panel = document.createElement('div');
+      panel.id = 'updpanel';
+      document.body.appendChild(panel);
+    }
+    var ls = updLoads(), st = updState();
+    var nowMs = Date.now();
+    var next = ls.filter(function (x) { return x.d && (!x.l.delvDue || x.l.delvDue > nowMs); })[0] || ls.filter(function (x) { return x.d; })[0];
+    var line = !ls.length ? UPD_T.countNone
+      : updFill(ls.length === 1 ? UPD_T.countOne : UPD_T.countLine, { n: ls.length, day: next ? next.day : '', md: next ? next.md : '', hm: next ? next.hm : '' });
+    if (ls.length && !next) line = line.replace(/ Next:.*$/, '');
+    var today = (UPD && UPD.today) || updCtDay(nowMs), rows = [];
+    Object.keys(st).forEach(function (bol) {
+      var x = st[bol].last;
+      if (st[bol].tbd) rows.push('<div><b>' + esc(bol) + '</b> <span class="updtbd" onclick="updOpenLoad(\'' + esc(bol) + '\',\'late\')">' + esc(UPD_T.itemTbd) + '</span></div>');
+      else if (updCtDay(x.at) === today) rows.push('<div><b>' + esc(bol) + '</b> ' + esc(updItemText(x)) + '</div>');
+    });
+    card.innerHTML = '<h2>' + esc(UPD_T.cardTitle) + '</h2>' +
+      '<p class="updline">' + esc(line) + '</p>' +
+      (ls.length ? '<button class="updbig" onclick="updList()">' + esc(UPD_T.open) + '</button>' : '') +
+      (rows.length ? '<div class="updsent"><b>' + esc(UPD_T.sentToday) + '</b>' + rows.join('') + '</div>' : '');
+    var pan = document.getElementById('updpanel');
+    if (pan && pan.className === 'on' && pan.getAttribute('data-screen') === 'list') updList();
+  }
+  function updGone() {
+    var c = document.getElementById('updcard'); if (c) c.parentNode.removeChild(c);
+    var p = document.getElementById('updpanel'); if (p) p.parentNode.removeChild(p);
+  }
+  function updShow(screen, html) {
+    var pan = document.getElementById('updpanel');
+    pan.setAttribute('data-screen', screen);
+    pan.innerHTML = '<div class="in">' + html + '</div>';
+    pan.className = 'on';
+    pan.scrollTop = 0;
+  }
+  function updClose() { var pan = document.getElementById('updpanel'); if (pan) { pan.className = ''; pan.innerHTML = ''; } UPDV = null; }
+
+  // 2. The list.
+  function updList() {
+    var ls = updLoads(), st = updState(), h = '', lastDay = null;
+    h += '<div class="updtop"><h2>' + esc(UPD_T.listTitle) + '</h2><button class="updx" onclick="updClose()">' + esc(UPD_T.close) + '</button></div>' +
+         '<p class="updhint">' + esc(UPD_T.listHint) + '</p>';
+    ls.forEach(function (x) {
+      var dk = x.day ? x.day + ' ' + x.md : UPD_T.noAppt;
+      if (dk !== lastDay) { h += '<div class="upddayh">' + esc(dk) + '</div>'; lastDay = dk; }
+      h += '<div class="updload">' + updSummary(x, st) +
+           '<div class="updbtns"><button onclick="updOpenLoad(\'' + esc(x.l.bol) + '\',\'late\')">' + esc(UPD_T.late) + '</button>' +
+           '<button class="det" onclick="updOpenLoad(\'' + esc(x.l.bol) + '\',\'unload\')">' + esc(UPD_T.unload) + '</button></div></div>';
+    });
+    updShow('list', h);
+  }
+  function updSummary(x, st) {
+    var l = x.l, s = (st || updState())[l.bol];
+    return '<div class="updtime">' + esc(x.hm || '--:--') + '</div>' +
+      '<div class="updref">' + esc((l.nfc || '') + ' | ' + l.bol) + '</div>' +
+      (x.city ? '<div class="updcity">' + esc(x.city) + '</div>' : '') +
+      (l.tl ? '<div class="updcity">' + esc(updFill(UPD_T.trailer, { tl: l.tl })) + '</div>' : '') +
+      (l.driver ? '<div class="upddrv">' + esc(l.driver) + '</div>' : '') +
+      (s && s.last ? '<div class="updnote">' + esc(s.tbd ? UPD_T.itemTbd : updItemText(s.last)) + '</div>' : '');
+  }
+  function updFind(bol) { return updLoads().filter(function (x) { return x.l.bol === bol; })[0] || null; }
+
+  // 3 and 4. One load's update.
+  function updOpenLoad(bol, kind) {
+    var x = updFind(bol);
+    if (!x) return;
+    UPDV = { kind: kind, bol: bol, eta: '', tbd: false, other: '', arrived: '', reason: '', uid: updUid(), busy: false, err: '' };
+    updForm();
+  }
+  function updForm() {
+    var v = UPDV, x = updFind(v.bol);
+    if (!x) { updList(); return; }
+    var am = updMin(x.hm), h = '';
+    h += '<div class="updtop"><h2>' + esc(v.kind === 'late' ? UPD_T.late : UPD_T.unload) + '</h2><button class="updx" onclick="updList()">' + esc(UPD_T.back) + '</button></div>';
+    h += '<div class="updload">' + (x.day ? '<div class="updhint" style="margin:0">' + esc(x.day + ' ' + x.md) + '</div>' : '') + updSummary(x) + '</div>';
+    if (v.kind === 'late') {
+      h += '<div class="updh">' + esc(UPD_T.newEta) + '</div>';
+      if (am >= 0) {
+        h += '<div class="updopts">' + [30, 60, 120].map(function (add) {
+          var t = updHm(am + add), lab = add === 30 ? '+30 min' : add === 60 ? '+1 hr' : '+2 hr';
+          return '<button class="updopt' + (v.eta === t && !v.other ? ' on' : '') + '" onclick="updPick(\'' + t + '\')">' + lab + '<small>' + t + '</small></button>';
+        }).join('') + '</div>';
+      }
+      h += '<div class="updfield"><label for="updother">' + esc(UPD_T.other) + '</label><input id="updother" inputmode="numeric" maxlength="5" placeholder="' + esc(UPD_T.otherPh) + '" value="' + esc(v.other) + '" oninput="updOther(this.value)"></div>';
+      h += '<div class="updopts two" style="grid-template-columns:1fr;margin-top:8px"><button class="updopt' + (v.tbd ? ' on' : '') + '" onclick="updTbd()">' + esc(UPD_T.tbd) + '</button></div>';
+      h += '<p class="updtbdnote">' + esc(UPD_T.tbdNote) + '</p>';
+    } else {
+      h += '<div class="updbanner">' + esc(am >= 0 ? updFill(UPD_T.banner, { hm: updHm(am + 120) }) : UPD_T.bannerNoAppt) + '</div>';
+      h += '<div class="updfield"><label for="updarr"><b>' + esc(UPD_T.arrived) + '</b></label><input id="updarr" inputmode="numeric" maxlength="5" placeholder="' + esc(UPD_T.otherPh) + '" value="' + esc(v.arrived) + '" oninput="updArr(this.value)"></div>';
+    }
+    h += '<div class="updh">' + esc(UPD_T.reasonHead) + '</div><div class="updopts two">' +
+         (v.kind === 'late' ? UPD_T.lateReasons : UPD_T.unloadReasons).map(function (r, i) {
+           return '<button class="updopt' + (v.reason === r ? ' on' : '') + '" onclick="updReason(' + i + ')">' + esc(r) + '</button>';
+         }).join('') + '</div>';
+    if (v.kind === 'unload') h += '<div class="updpay"><b>' + esc(UPD_T.payHead) + '</b><ul>' + UPD_T.pay.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
+    h += '<button class="updsend" id="updsend" onclick="updSend()"></button><div class="updwhy" id="updwhy"></div><div class="upderr" id="upderr">' + esc(v.err) + '</div>';
+    updShow('form', h);
+    updButton();
+  }
+  // The Send button: its words and whether it can be pressed.
+  function updButton() {
+    var v = UPDV, b = document.getElementById('updsend'), w = document.getElementById('updwhy');
+    if (!v || !b) return;
+    var eta = v.other ? updTyped(v.other) : v.eta, why = '';
+    if (v.kind === 'late') {
+      b.textContent = v.busy ? UPD_T.sending : v.tbd ? UPD_T.sendTbd : eta ? updFill(UPD_T.sendEta, { hm: eta }) : UPD_T.sendPlain;
+      if (!v.tbd && !eta) why = UPD_T.needEta;
+    } else {
+      b.textContent = v.busy ? UPD_T.sending : UPD_T.sendDet;
+      if (!updTyped(v.arrived)) why = UPD_T.needArrived;
+    }
+    if (!v.reason) why = UPD_T.needReason;
+    b.disabled = !!why || v.busy;
+    w.textContent = v.busy ? '' : why;
+  }
+  function updPick(t) { UPDV.eta = t; UPDV.other = ''; UPDV.tbd = false; updForm(); }
+  function updOther(val) {
+    UPDV.other = val; UPDV.eta = ''; UPDV.tbd = false;
+    document.querySelectorAll('#updpanel .updopt').forEach(function (b) { if (/updPick|updTbd/.test(b.getAttribute('onclick') || '')) b.className = 'updopt'; });
+    updButton();
+  }
+  function updTbd() { UPDV.tbd = !UPDV.tbd; if (UPDV.tbd) { UPDV.eta = ''; UPDV.other = ''; } updForm(); }
+  function updArr(val) { UPDV.arrived = val; updButton(); }
+  function updReason(i) { UPDV.reason = (UPDV.kind === 'late' ? UPD_T.lateReasons : UPD_T.unloadReasons)[i]; updForm(); }
+
+  // Send: the edge's /submit, the same route every submission takes. The update keeps one id while this screen is
+  // open, so a second press or a retry is the same update and NFC mails it once.
+  function updSend() {
+    var v = UPDV;
+    if (!v || v.busy) return;
+    var x = updFind(v.bol);
+    var eta = v.other ? updTyped(v.other) : v.eta;
+    var u = { uid: v.uid, kind: v.kind, bol: v.bol, nfc: x ? x.l.nfc : '', tl: x ? (x.l.tl || '') : '', reason: v.reason,
+              eta: v.kind === 'late' && !v.tbd ? eta : '', tbd: v.kind === 'late' && v.tbd, arrived: v.kind === 'unload' ? updTyped(v.arrived) : '',
+              appt: x && x.d ? x.d.date + ' ' + x.d.time : '', city: x ? x.city : '' };
+    if (!v.reason || (u.kind === 'late' && !u.eta && !u.tbd) || (u.kind === 'unload' && !u.arrived)) { updButton(); return; }
+    v.busy = true; v.err = ''; updButton();
+    var e = document.getElementById('upderr'); if (e) e.textContent = '';
+    fetch(EDGE + '/submit?t=' + encodeURIComponent(TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ data: { updates: [u] } })
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.ok) throw new Error((res && res.error) || 'not accepted');
+        u.at = Date.now();
+        UPDLOCAL.push(u);
+        updSent(u, x);
+        if (UPD) updPaint({ upd: UPD });
+      })
+      .catch(function () {
+        v.busy = false; v.err = UPD_T.failed;
+        updButton();
+        var e2 = document.getElementById('upderr'); if (e2) e2.textContent = UPD_T.failed;
+      });
+  }
+  // 5. Sent.
+  function updSent(u, x) {
+    var what = u.kind === 'unload' ? updFill(UPD_T.whatUnload, { hm: u.arrived, reason: u.reason })
+             : u.tbd ? updFill(UPD_T.whatTbd, { reason: u.reason }) : updFill(UPD_T.whatEta, { hm: u.eta, reason: u.reason });
+    UPDV = null;
+    updShow('sent', '<div class="updok"><div class="tick">&#10004;</div><h2>' + esc(UPD_T.sentTitle) + '</h2>' +
+      '<p><b>' + esc((u.nfc ? u.nfc + ' | ' : '') + u.bol) + '</b>' + (x && x.city ? '<br>' + esc(x.city) : '') + '</p>' +
+      '<p>' + esc(what) + '</p><p>' + esc(UPD_T.sentNote) + '</p>' +
+      '<button class="updsend" onclick="updList()">' + esc(UPD_T.another) + '</button>' +
+      '<button class="updx" style="width:100%;margin-top:10px;padding:12px" onclick="updClose()">' + esc(UPD_T.done) + '</button></div>');
   }
 </script>
 </body>
