@@ -2644,7 +2644,10 @@
     applyQueued(p.loads || [], p.queued);
     renderAll();
     // 1116-UPD02: the update section, only when the board carries it (UPD_T block below).
-    try { if (p.upd && window.updPaint) updPaint(p); else if (window.updGone) updGone(); } catch (e) {}
+    // 1117-UPD04: a board that lands before the UPD_T block has loaded (an edge answer faster than the page's own
+    // script) was dropped, and an Apps Script refresh cannot bring it back (it carries no upd), so the card never
+    // showed. Kept here and painted by that block when it loads. A board without upd is handled exactly as before.
+    try { if (p.upd && window.updPaint) updPaint(p); else if (p.upd) window.UPD_EARLY = p; else if (window.updGone) updGone(); } catch (e) {}
   }
 
   // What the edge reports, plus anything we sent that it has not caught up on.
@@ -3475,7 +3478,30 @@
       '.updwhy{font-size:13px;color:#666;margin-top:6px;text-align:center}' +
       '.upderr{font-size:14px;color:#9a2b2b;margin-top:8px;text-align:center}' +
       '.updok{text-align:center;padding:20px 8px}.updok .tick{font-size:42px;color:#2e7d32}' +
-      '.updok h2{margin:6px 0 10px;color:#0d3320}.updok p{margin:6px 0;font-size:15px}';
+      '.updok h2{margin:6px 0 10px;color:#0d3320}.updok p{margin:6px 0;font-size:15px}' +
+      // 1117-UPD04: on a wide screen the list and both update screens sat in one 560px column, a phone layout
+      // stretched onto a desktop. Wide only (900px up, where the page's own phone rules stop): the list sets
+      // the load cards in rows under each day, and an update screen puts the load on the left and the choices on
+      // the right, everything centred in the page (Ross, 1117 0946 CT). Below 900px no rule here applies, so the
+      // phone page renders exactly as before.
+      '@media (min-width:900px){' +
+        '#updpanel .in{max-width:1180px;padding:20px 24px 48px}' +
+        '#updpanel .updtop{position:relative;justify-content:center;min-height:38px}' +
+        '#updpanel .updtop .updx{position:absolute;right:0;top:0}' +
+        '#updpanel[data-screen=list] .in{display:flex;flex-wrap:wrap;justify-content:center;column-gap:14px}' +
+        '#updpanel[data-screen=list] .in>*{flex:0 0 100%}' +
+        '#updpanel[data-screen=list] .updhint{text-align:center}' +
+        '#updpanel[data-screen=list] .in>.updload{flex:0 1 340px;display:flex;flex-direction:column;margin-bottom:14px}' +
+        '#updpanel[data-screen=list] .updload .updbtns{margin-top:auto;padding-top:10px}' +
+        '#updpanel[data-screen=list] .upddayh{border-bottom:2px solid #0d3320;padding-bottom:4px;margin:18px 0 12px}' +
+        '#updpanel[data-screen=form] .in{max-width:940px;display:grid;grid-template-columns:minmax(260px,340px) minmax(0,520px);justify-content:center;column-gap:32px;align-items:start}' +
+        '#updpanel[data-screen=form] .in>*{grid-column:2}' +
+        '#updpanel[data-screen=form] .in>.updtop{grid-column:1/-1;margin-bottom:12px}' +
+        '#updpanel[data-screen=form] .in>.updload{grid-column:1;grid-row:2/span 40;position:sticky;top:12px;margin:0}' +
+        '#updpanel[data-screen=form] .in>.updh:first-of-type{margin-top:0}' +
+        '#updpanel[data-screen=form] .updopts.two{grid-template-columns:repeat(4,1fr)}' +
+        '#updpanel[data-screen=form] .updbanner{margin-top:0}' +
+      '}';
     document.head.appendChild(s);
   }
 
@@ -3659,6 +3685,8 @@
       '<button class="updsend" onclick="updList()">' + esc(UPD_T.another) + '</button>' +
       '<button class="updx" style="width:100%;margin-top:10px;padding:12px" onclick="updClose()">' + esc(UPD_T.done) + '</button></div>');
   }
+  // 1117-UPD04: a board that arrived before this block loaded (applyPayload kept it).
+  if (window.UPD_EARLY) { try { updPaint(window.UPD_EARLY); } catch (e) {} window.UPD_EARLY = null; }
 </script>
 </body>
 </html>
