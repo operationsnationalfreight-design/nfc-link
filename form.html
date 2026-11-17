@@ -2565,6 +2565,18 @@
   function applyPayload(p) {
     p = p || {};
     if (p.ft) ATOKEN = p.ft;
+    // 1116-UPD03: Apps Script's board carries neither the update section nor FourKites status, so an Apps Script
+    // refresh (the 30-second check once the edge copy is 10 minutes old) took both off the page. Keep what the
+    // edge last sent. A page that never had them is untouched.
+    if (!p.edge) {
+      if (typeof UPD !== 'undefined' && UPD && !p.upd) p.upd = UPD;
+      if (FKAT && !p.fkAt) {
+        p.fkAt = FKAT;
+        var fkKeep = {};
+        (LOADS || []).forEach(function (l) { if (l && l.fk) fkKeep[l.bol] = l.fk; });
+        (p.loads || []).forEach(function (l) { if (l && !l.fk && fkKeep[l.bol]) l.fk = fkKeep[l.bol]; });
+      }
+    }
     FKAT = p.fkAt || '';
 
     // Remember any provisional loads, and put back ones a later payload
