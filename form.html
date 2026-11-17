@@ -3340,8 +3340,24 @@
     tbd: 'ETA not known yet',
     tbdNote: 'We will tell the customer the ETA is to follow. Come back and add it as soon as the driver is rolling.',
     reasonHead: 'REASON (REQUIRED)',
-    lateReasons: ['Traffic', 'Weather', 'Breakdown', 'Hours of service'],
-    unloadReasons: ['Waiting on a door', 'Slow unload', 'Receiver closed', 'Product issue'],
+    lateReasons: ['Traffic', 'Weather', 'Breakdown', 'Hours of service', 'Other'],
+    unloadReasons: ['Waiting on a door', 'Slow unload', 'Receiver closed', 'Product issue', 'Other'],
+    // 1117-UPD04: Other takes a typed reason, sent as "Other: <typed>" (REG55 1126 CT).
+    otherLabel: 'Reason',
+    whyPh: 'Type the reason',
+    needOther: 'Type the reason, 60 characters at most.',
+    // 1117-UPD04: no delayed unload before the appointment; after the 2 hour dwell window it can still be sent, marked late
+    // (Ross's rule, REG55 1129 CT).
+    unloadOpens: 'Delayed unload opens at {hm} on {md}, the appointment time.',
+    unloadLateLine: 'Past the 2 hour dwell window (closed {hm}). A delayed unload sent now is late.',
+    lateDetHead: 'DETENTION REPORTED LATE',
+    lateDet: 'Detention must be reported within the 2 hour dwell window. This one is late.',
+    // FourKites in its own box and colour (Ross, 1117 1148 CT: not buried in another alert).
+    fkBoxHead: 'FOURKITES',
+    fkBoxState: { 'Tracking': 'TRACKING', 'Not tracking': 'NOT TRACKING', 'Not started': 'NOT STARTED' },
+    fkBoxAsOf: 'as of {hm} CT',
+    fkPay: 'FourKites tracking must be accurate for detention to be paid.',
+    needArrivedPast: 'The arrival time cannot be later than now ({hm} at the receiver).',
     sendEta: 'Send to NFC: new ETA {hm}',
     sendTbd: 'Send to NFC: ETA to follow',
     sendPlain: 'Send to NFC',
@@ -3388,6 +3404,34 @@
     if (!m) return { key: '9999', day: '', md: '' };
     var d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
     return { key: m[3] + m[1] + m[2], day: UPD_T.days[d.getDay()], md: m[1] + '/' + m[2] };
+  }
+  // 1117-UPD04: the delivery appointment as an instant, in the receiver's zone (the state on the stop, as delvPassed reads it).
+  function updZone(x) {
+    var st = String((x && x.city) || '').toUpperCase().match(/(?:,\s*|\s)([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?\s*$/);
+    return (st && STATE_TZ[st[1]]) || 'America/Chicago';
+  }
+  function updApptMs(x) {
+    var d = String((x && x.d && x.d.date) || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/), t = String((x && x.hm) || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!d || !t) return NaN;
+    return zonedMs(+d[3], +d[1], +d[2], +t[1], +t[2], updZone(x));
+  }
+  // The dwell window: open from the appointment to 2 hours after it. {state: before | open | after | none, ...}
+  function updWin(x) {
+    var a = updApptMs(x), now = Date.now();
+    if (isNaN(a)) return { state: 'none' };
+    return { state: now < a ? 'before' : now > a + 7200000 ? 'after' : 'open', appt: a };
+  }
+  // The arrival typed (HH:MM) as an instant: the clock time nearest the appointment, as the server reads it.
+  function updArrMs(x, hm) {
+    var a = updApptMs(x), t = String(hm || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (isNaN(a) || !t) return NaN;
+    var am = updMin(x.hm), tm = +t[1] * 60 + +t[2], diff = tm - am;
+    if (diff > 720) diff -= 1440; else if (diff < -720) diff += 1440;
+    return a + diff * 60000;
+  }
+  function updNowHm(x) {
+    try { return new Intl.DateTimeFormat('en-GB', { timeZone: updZone(x), hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Date.now())); }
+    catch (e) { return ''; }
   }
   function updUid() { return 'u' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   function updCt(ms) {
@@ -3461,6 +3505,8 @@
       '.updbtns{display:flex;gap:8px;margin-top:10px}' +
       '.updbtns button{flex:1 1 0;font:inherit;font-size:15px;font-weight:600;padding:12px 6px;border-radius:5px;cursor:pointer;border:1px solid #0d3320;background:#fff;color:#0d3320}' +
       '.updbtns button.det{border-color:#9a2b2b;color:#9a2b2b}' +
+      '.updbtns button:disabled{border-color:#c9cfcc;color:#9aa39e;background:#f4f6f5;cursor:default}' +
+      '.updwin{font-size:13px;color:#555;margin-top:6px}' +
       '.updh{font-size:12px;font-weight:700;letter-spacing:.6px;color:#0d3320;margin:16px 0 6px}' +
       '.updopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}' +
       '.updopts.two{grid-template-columns:repeat(2,1fr)}' +
@@ -3500,7 +3546,7 @@
         '#updpanel[data-screen=form] .in>.updtop{grid-column:1/-1;margin-bottom:12px}' +
         '#updpanel[data-screen=form] .in>.updload{grid-column:1;grid-row:2/span 40;position:sticky;top:12px;margin:0}' +
         '#updpanel[data-screen=form] .in>.updh:first-of-type{margin-top:0}' +
-        '#updpanel[data-screen=form] .updopts.two{grid-template-columns:repeat(4,1fr)}' +
+        '#updpanel[data-screen=form] .updopts.two{grid-template-columns:repeat(5,1fr)}' +
         '#updpanel[data-screen=form] .updbanner{margin-top:0}' +
       '}';
     document.head.appendChild(s);
@@ -3562,9 +3608,12 @@
     ls.forEach(function (x) {
       var dk = x.day ? x.day + ' ' + x.md : UPD_T.noAppt;
       if (dk !== lastDay) { h += '<div class="upddayh">' + esc(dk) + '</div>'; lastDay = dk; }
+      var w = updWin(x), shut = w.state === 'before', wl = shut ? updFill(UPD_T.unloadOpens, { hm: x.hm, md: x.md })
+               : w.state === 'after' ? updFill(UPD_T.unloadLateLine, { hm: updHm(updMin(x.hm) + 120) }) : '';
       h += '<div class="updload">' + updSummary(x, st) +
            '<div class="updbtns"><button onclick="updOpenLoad(\'' + esc(x.l.bol) + '\',\'late\')">' + esc(UPD_T.late) + '</button>' +
-           '<button class="det" onclick="updOpenLoad(\'' + esc(x.l.bol) + '\',\'unload\')">' + esc(UPD_T.unload) + '</button></div></div>';
+           '<button class="det"' + (shut ? ' disabled' : '') + ' onclick="updOpenLoad(\'' + esc(x.l.bol) + '\',\'unload\')">' + esc(UPD_T.unload) + '</button></div>' +
+           (wl ? '<div class="updwin">' + esc(wl) + '</div>' : '') + '</div>';
     });
     updShow('list', h);
   }
@@ -3584,7 +3633,8 @@
   function updOpenLoad(bol, kind) {
     var x = updFind(bol);
     if (!x) return;
-    UPDV = { kind: kind, bol: bol, eta: '', tbd: false, other: '', arrived: '', reason: '', uid: updUid(), busy: false, err: '' };
+    if (kind === 'unload' && updWin(x).state === 'before') { updList(); return; }
+    UPDV = { kind: kind, bol: bol, eta: '', tbd: false, other: '', arrived: '', reason: '', why: '', uid: updUid(), busy: false, err: '' };
     updForm();
   }
   function updForm() {
@@ -3606,14 +3656,24 @@
       h += '<p class="updtbdnote">' + esc(UPD_T.tbdNote) + '</p>';
     } else {
       h += '<div class="updbanner">' + esc(am >= 0 ? updFill(UPD_T.banner, { hm: updHm(am + 120) }) : UPD_T.bannerNoAppt) + '</div>';
+      // 1117-UPD04: past the dwell window it can still be sent, with this alert (Ross, REG55 1129 CT).
+      if (updWin(x).state === 'after') h += '<div class="updlate" style="border:2px solid #c62828;background:#fdecea;color:#9a2b2b;border-radius:5px;padding:10px 12px;margin:10px 0;font-size:14px"><b style="display:block;margin-bottom:4px">' + esc(UPD_T.lateDetHead) + '</b>' + esc(UPD_T.lateDet) + '</div>';
       // 1116-UPD03: detention is paid only on a tracked load; a warning, never a block on Send.
-      if (fkWord(x.l) === 'Not tracking') h += '<div class="updfknot" style="border:2px solid #c62828;background:#fdecea;color:#9a2b2b;border-radius:5px;padding:10px 12px;margin:10px 0;font-size:14px"><b style="display:block;margin-bottom:4px">' + esc(UPD_T.fkNotHead) + '</b>' + esc(UPD_T.fkNot) + '</div>';
+      // 1117-UPD04: FourKites in its own box and colour on every Delayed unload screen, saying whether tracking is working
+      // (Ross, 1117 1148 CT); it replaces UPD03's red box, which showed only when not tracking. The state is the page's own
+      // fresh FourKites reading (fkWord, under 30 minutes old); with none, the box says only what detention needs.
+      var fw = fkWord(x.l), fhm = '';
+      if (fw) { try { fhm = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(Date.parse(FKAT))); } catch (e) {} }
+      h += '<div class="updfk" style="border:2px solid #1565c0;background:#e8f1fb;color:#0d3c78;border-radius:5px;padding:10px 12px;margin:10px 0;font-size:14px">' +
+           '<b style="display:block;margin-bottom:4px">' + esc(UPD_T.fkBoxHead) + (fw ? ': <span style="color:' + FK_COLOR[fw] + '">' + esc(UPD_T.fkBoxState[fw]) + '</span> <span style="font-weight:400;font-size:12px;color:#555">' + esc(updFill(UPD_T.fkBoxAsOf, { hm: fhm })) + '</span>' : '') + '</b>' +
+           esc(UPD_T.fkPay) + '</div>';
       h += '<div class="updfield"><label for="updarr"><b>' + esc(UPD_T.arrived) + '</b></label><input id="updarr" inputmode="numeric" maxlength="5" placeholder="' + esc(UPD_T.otherPh) + '" value="' + esc(v.arrived) + '" oninput="updArr(this.value)"></div>';
     }
     h += '<div class="updh">' + esc(UPD_T.reasonHead) + '</div><div class="updopts two">' +
          (v.kind === 'late' ? UPD_T.lateReasons : UPD_T.unloadReasons).map(function (r, i) {
            return '<button class="updopt' + (v.reason === r ? ' on' : '') + '" onclick="updReason(' + i + ')">' + esc(r) + '</button>';
          }).join('') + '</div>';
+    if (v.reason === 'Other') h += '<div class="updfield"><label for="updothr">' + esc(UPD_T.otherLabel) + '</label><input id="updothr" maxlength="60" placeholder="' + esc(UPD_T.whyPh) + '" value="' + esc(v.why) + '" oninput="updWhy(this.value)"></div>';
     if (v.kind === 'unload') h += '<div class="updpay"><b>' + esc(UPD_T.payHead) + '</b><ul>' + UPD_T.pay.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul></div>';
     h += '<button class="updsend" id="updsend" onclick="updSend()"></button><div class="updwhy" id="updwhy"></div><div class="upderr" id="upderr">' + esc(v.err) + '</div>';
     updShow('form', h);
@@ -3630,7 +3690,13 @@
     } else {
       b.textContent = v.busy ? UPD_T.sending : UPD_T.sendDet;
       if (!updTyped(v.arrived)) why = UPD_T.needArrived;
+      else {
+        // 1117-UPD04: an arrival later than now at the receiver is refused here; the server still holds one as a backstop.
+        var ux = updFind(v.bol), ams = ux ? updArrMs(ux, updTyped(v.arrived)) : NaN;
+        if (!isNaN(ams) && ams > Date.now()) why = updFill(UPD_T.needArrivedPast, { hm: updNowHm(ux) });
+      }
     }
+    if (v.reason === 'Other' && !String(v.why || '').trim()) why = UPD_T.needOther;
     if (!v.reason) why = UPD_T.needReason;
     b.disabled = !!why || v.busy;
     w.textContent = v.busy ? '' : why;
@@ -3643,6 +3709,7 @@
   }
   function updTbd() { UPDV.tbd = !UPDV.tbd; if (UPDV.tbd) { UPDV.eta = ''; UPDV.other = ''; } updForm(); }
   function updArr(val) { UPDV.arrived = val; updButton(); }
+  function updWhy(val) { UPDV.why = String(val || '').slice(0, 60); updButton(); }
   function updReason(i) { UPDV.reason = (UPDV.kind === 'late' ? UPD_T.lateReasons : UPD_T.unloadReasons)[i]; updForm(); }
 
   // Send: the edge's /submit, the same route every submission takes. The update keeps one id while this screen is
@@ -3652,10 +3719,12 @@
     if (!v || v.busy) return;
     var x = updFind(v.bol);
     var eta = v.other ? updTyped(v.other) : v.eta;
-    var u = { uid: v.uid, kind: v.kind, bol: v.bol, nfc: x ? x.l.nfc : '', tl: x ? (x.l.tl || '') : '', reason: v.reason,
+    var u = { uid: v.uid, kind: v.kind, bol: v.bol, nfc: x ? x.l.nfc : '', tl: x ? (x.l.tl || '') : '',
+              reason: v.reason === 'Other' ? 'Other: ' + String(v.why || '').replace(/\s+/g, ' ').trim().slice(0, 60) : v.reason,
               eta: v.kind === 'late' && !v.tbd ? eta : '', tbd: v.kind === 'late' && v.tbd, arrived: v.kind === 'unload' ? updTyped(v.arrived) : '',
               appt: x && x.d ? x.d.date + ' ' + x.d.time : '', city: x ? x.city : '' };
-    if (!v.reason || (u.kind === 'late' && !u.eta && !u.tbd) || (u.kind === 'unload' && !u.arrived)) { updButton(); return; }
+    if (!v.reason || (v.reason === 'Other' && u.reason === 'Other: ') || (u.kind === 'late' && !u.eta && !u.tbd) || (u.kind === 'unload' && !u.arrived)) { updButton(); return; }
+    if (u.kind === 'unload' && x && updArrMs(x, u.arrived) > Date.now()) { updButton(); return; }
     v.busy = true; v.err = ''; updButton();
     var e = document.getElementById('upderr'); if (e) e.textContent = '';
     fetch(EDGE + '/submit?t=' + encodeURIComponent(TOKEN), {
